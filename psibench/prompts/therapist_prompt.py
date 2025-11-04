@@ -26,16 +26,14 @@ def create_therapist_prompt() -> ChatPromptTemplate:
     Keep responses concise (2–4 sentences).
 
     Maintain emotional warmth and professionalism.
-    """
-
-    human_message = """Conversation so far:
+    
+    Conversation so far:
     {conversation_history}
 
-    Patient's latest message: {patient_message}
+    User's latest message: {patient_message}
 
     Provide your therapeutic response:"""
 
     return ChatPromptTemplate.from_messages([
         ("system", system_message),
-        ("human", human_message)
     ])

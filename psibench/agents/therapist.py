@@ -45,7 +45,7 @@ class TherapistAgent:
         Generate a therapeutic response.
         
         Args:
-            conversation_history: List of previous messages [{"role": "patient/therapist", "content": "..."}]
+            conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
             patient_message: The patient's latest message (None for starting the conversation)
             
         Returns:
@@ -55,20 +55,20 @@ class TherapistAgent:
             "conversation_history": self._format_history(conversation_history),
             "patient_message": patient_message or "Starting the session"
         }
-        
         response: TherapistResponse = self.chain.invoke(inputs)
         return response.response
-        
-        return formatted
-    
+            
     def _format_history(self, history: list[Dict[str, str]]) -> str:
-        """Format conversation history for the prompt."""
+        """Format conversation history for the prompt.
+        Switch roles to match prompt expectations (patient as user, therapist as assistant).
+        """
         if not history:
             return "Beginning of session."
         
         formatted = []
         for msg in history:
-            role = msg["role"].capitalize()
+            role = "user" if msg["role"] == "assistant" else "assistant"
+            role = role.capitalize()
             content = msg["content"]
             formatted.append(f"{role}: {content}")
         

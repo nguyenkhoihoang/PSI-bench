@@ -49,12 +49,12 @@ class PatientAgent:
         self.prompt = create_patient_prompt(psi=self.psi)
         self.chain = self.prompt | self.llm.with_structured_output(PatientResponse)
     
-    def respond(self, conversation_history: list[Dict[str, str]], therapist_message: str) -> str:
+    def respond(self, conversation_history: list[Dict[str, str]], therapist_message:str) -> str:
         """
         Generate a response to the therapist's message.
         
         Args:
-            conversation_history: List of previous messages [{"role": "patient/therapist", "content": "..."}]
+            conversation_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
             therapist_message: The therapist's latest message
             
         Returns:
@@ -63,13 +63,13 @@ class PatientAgent:
         # Prepare inputs based on prompt variant
         if self.psi == "eeyore":
             inputs = {
-                "eeyore_profile": self.patient_profile.get("eeyore_profile", ""),
+                "eeyore_system_prompt": self.patient_profile.get("eeyore_system_prompt", ""),
                 "conversation_history": self._format_history(conversation_history),
-                "current_message": therapist_message
+                "therapist_message": therapist_message
             }
+            print(self.prompt.format(**inputs))
         else:
            pass
-        
         response: PatientResponse = self.chain.invoke(inputs)
         return response.response
     

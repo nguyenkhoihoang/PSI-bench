@@ -44,11 +44,12 @@ def run_session(profile: Dict[str, Any], config: Dict[str, Any], psi: str = "eey
         messages.append({"role": "user", "content": therapist_msg})
         
         # Main conversation loop
+        # User: therapist, Assistant: patient
         for _ in range(max_turns):
-            patient_msg = patient.respond(messages, messages[-1]["content"])
+            patient_msg = patient.respond(messages[:-1], messages[-1]["content"])
             messages.append({"role": "assistant", "content": patient_msg})
             
-            therapist_msg = therapist.respond(messages, messages[-1]["content"])
+            therapist_msg = therapist.respond(messages[:-1], messages[-1]["content"])
             messages.append({"role": "user", "content": therapist_msg})
             
     except Exception as e:
@@ -93,7 +94,7 @@ def main():
             profile = json.loads(row["profile"])          
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_profile"] = system_prompt
+                profile["eeyore_system_prompt"] = system_prompt
             
             # Run session
             final_state = run_session(profile, config=config, psi=args.psi)
