@@ -1,0 +1,17 @@
+# Configuration for therapy session simulation
+
+# Patient model
+patient:
+  simulator: "eeyore"
+  model: "gpt-4.1-mini"
+  temperature: 0.7
+  
+# Therapist model
+therapist:
+  model: "gpt-4.1-mini"
+  temperature: 0.5
+
+# Session parameters
+session:
+  max_turns: 15
+  

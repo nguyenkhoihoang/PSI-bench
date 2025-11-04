@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "psibench"
+version = "0.1.0"
+description = "An evaluation framework for evaluating patient simulators"
+requires-python = ">=3.11"
+authors = [
+    { name = "nguyenkhoihoang" }
+]
+dependencies = [
+    "pydantic>=2.0.0",
+    "langchain==0.3.27",
+    "langchain-core==0.3.79",
+    "langchain-community==0.3.31",
+    "langchain-litellm==0.3.0",
+    "langchain-text-splitters==0.3.11",
+    "tqdm>=4.65.0",
+    "pyyaml>=6.0.1",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+    "datasets>=2.14.0",
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "litellm>=1.0.0",
+    "rouge_score>=0.1.2",
+    "bert_score>=0.3.13",
+    "nltk>=3.8.1",
+    "tabulate"
+]
