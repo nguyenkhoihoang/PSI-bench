@@ -1,3 +1,3 @@
-from data_loader.main_loader import load_dataset
+from data_loader.main_loader import load_eeyore_dataset
 
-__all__ = ["load_dataset"]
+__all__ = ["load_eeyore_dataset"]
