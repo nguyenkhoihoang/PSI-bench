@@ -53,3 +53,4 @@ Thumbs.db
 # Output files
 output/
 results/
+data/synthetic/*
