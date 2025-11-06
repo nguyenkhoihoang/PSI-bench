@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-from data_loader import load_dataset
+from data_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
 from agents.therapist import TherapistAgent
 from models.eeyore import prepare_prompt_from_profile
@@ -80,7 +80,7 @@ def main():
     output_dir = Path(args.output_dir) / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    df = load_dataset(args.dataset)
+    df = load_eeyore_dataset(args.dataset)
     
     # Limit number of conversations if specified
     if args.N is not None:
