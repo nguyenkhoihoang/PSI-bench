@@ -21,11 +21,20 @@ load_dotenv(find_dotenv())
 # #     os.path.abspath('.env')), os.getenv('DATA_PATH'))
 # out_path = os.path.join(os.path.dirname(
 #     os.path.abspath('.env')), os.getenv('OUT_PATH'))
-
 # --- Setup directories from .env ---
-data_path = os.getenv("DATA_PATH", "./data")
-out_path = os.getenv("OUT_PATH", "./output")
+# --- Setup directories from .env ---
+# Always anchor to the repo root (2 levels above this file)
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+data_path = os.path.join(repo_root, os.getenv("DATA_PATH", "data"))
+out_path = os.path.join(repo_root, os.getenv("OUT_PATH", "output"))
 os.makedirs(out_path, exist_ok=True)
+
+
+
+# # --- Setup directories from .env ---
+# data_path = os.getenv("DATA_PATH", "./data")
+# out_path = os.getenv("OUT_PATH", "./output")
+# os.makedirs(out_path, exist_ok=True)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
