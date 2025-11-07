@@ -10,6 +10,9 @@ pip install -e .
 Create .env file inside psibench/ and put in your env variables OPENAI_API_KEY, OPENAI_BASE_URL, HF_TOKEN
 
 ### 2. Generate synthetic conversations
+
+To generate synthetic data, specify dataset source `--dataset`  ('esc' (default), 'hope', 'annomi') and type of patient simulator you want `--psi` ('eeyore' (default), 'patientpsi', 'roleplaydoh')
+
 ```
 python -m psibench.generate_conversations --dataset esc
 ```
@@ -19,11 +22,18 @@ export PYTHONPATH to your repo/psi-bench, e.g.
 ```
 export PYTHONPATH=/u/nhoang1/PSI-bench/psibench/
 ```
+The synthetic data will be saved in data/synthetic/{psi}/{dataset}
+
+For e.g. `data/synthetic/eeyore/esc/`
 
 ### 3. Compare real and synthetic convo
-Specify some index of session u want to compare. e.g.
+Specify some index of session u want to compare. e.g. (Look for idx in synthetic data folder)
+
+Note: Only ESC has real situation from original dataset. Others just have situation loaded from eeyore.
+
 ```
 python -m psibench.eval.read_compare_convo 3
+python -m psibench.eval.read_compare_convo --dataset annomi 39
 ```
 <!-- (Later: haven't checked since delta GPU been down lately)
 Run eval comparison on delta (may need to edit your account in sbatch script) 

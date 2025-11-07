@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-from data_loader import load_dataset
+from data_loader.main_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
 from agents.therapist import TherapistAgent
 from models.eeyore import prepare_prompt_from_profile
@@ -25,7 +25,15 @@ def parse_args():
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
     parser.add_argument("--N", type=int, default=5, 
                        help="Number of conversations to generate (default: all available samples)")
-    return parser.parse_args()
+    
+    args = parser.parse_args()
+    
+    # Clean string input arguments
+    args.dataset = args.dataset.strip().lower() if args.dataset else args.dataset
+    args.output_dir = args.output_dir.strip() if args.output_dir else args.output_dir
+    args.psi = args.psi.strip().lower() if args.psi else args.psi
+    
+    return args
 
 
 def run_session(profile: Dict[str, Any], config: Dict[str, Any], psi: str = "eeyore") -> Dict[str, Any]:
@@ -77,10 +85,10 @@ def main():
     if args.max_turns:
         config["session"]["max_turns"] = args.max_turns
 
-    output_dir = Path(args.output_dir) / args.dataset
+    output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    df = load_dataset(args.dataset)
+    df = load_eeyore_dataset(args.dataset)
     
     # Limit number of conversations if specified
     if args.N is not None:
