@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-from data_loader import load_eeyore_dataset
+from data_loader.main_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
 from agents.therapist import TherapistAgent
 from models.eeyore import prepare_prompt_from_profile
@@ -85,7 +85,7 @@ def main():
     if args.max_turns:
         config["session"]["max_turns"] = args.max_turns
 
-    output_dir = Path(args.output_dir) / args.dataset
+    output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
     
     df = load_eeyore_dataset(args.dataset)
