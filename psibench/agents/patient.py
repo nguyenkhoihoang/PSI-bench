@@ -1,6 +1,5 @@
 """Patient agent implementation with structured output."""
 
-import asyncio
 import os
 from typing import Any, Dict
 
@@ -9,6 +8,8 @@ from dotenv import load_dotenv
 from langchain_litellm import ChatLiteLLM
 from prompts.patient_prompt import create_patient_prompt
 from pydantic import BaseModel, Field
+
+from psibench.models.roleplay_doh import roleplay_doh_rewrite_response
 
 load_dotenv()
 
@@ -82,10 +83,6 @@ class PatientAgent:
             response: PatientResponse = await self.chain.ainvoke(inputs)
             return response.response
         elif self.psi == "roleplaydoh":
-            from psibench.models.roleplay_doh import (
-                RoleplayDohArgs,
-                roleplay_doh_rewrite_response,
-            )
 
             # Initial response generation using a basic prompt
             inputs = {
@@ -100,26 +97,12 @@ class PatientAgent:
                 {"role": "user", "content": therapist_message}
             ]
 
-            # Construct args for roleplay_doh_pipeline
-            # patient_config = self.config.get("patient", {})
-            # args = RoleplayDohArgs(
-            #     experiment_model=patient_config.get("model"),
-            #     temperature=patient_config.get("temperature"),
-            #     top_p=patient_config.get(
-            #         "top_p", 1.0
-            #     ),  # Default to 1.0 if not specified
-            #     max_tokens=patient_config.get(
-            #         "max_tokens", 1024
-            #     ),  # Default to 1.0 if not specified
-            # )
-
             # Refine the response using roleplay_doh_pipeline
             refined_response = await roleplay_doh_rewrite_response(
                 self.llm,  # client
                 prompts_for_pipeline,  # initial_prompts
                 initial_response.response,  # response_content
                 self.patient_profile,  # profile
-                # args,  # args
             )
 
             return refined_response

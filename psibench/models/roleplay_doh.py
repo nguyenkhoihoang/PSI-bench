@@ -1,19 +1,10 @@
 import asyncio
 import logging
 import re
-from dataclasses import dataclass
 from string import Template
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RoleplayDohArgs:
-    experiment_model: str
-    temperature: float
-    top_p: float
-    max_tokens: int
 
 
 list_principles = """{"0": [
