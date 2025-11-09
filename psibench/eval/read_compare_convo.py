@@ -3,7 +3,13 @@
 import json
 import os
 from pathlib import Path
+
 import pandas as pd
+from data_loader.esc import (
+    load_esc_data_with_indices,
+    load_esc_original_data,
+    load_synthetic_data,
+)
 from tabulate import tabulate
 
 from data_loader.esc import load_esc_data_with_indices, load_esc_original_data
@@ -16,8 +22,8 @@ def load_synthetic_conversation(idx: int, data_dir: str):
         with open(file_path, 'r') as f:
             data = json.load(f)
             return {
-                'messages': data['messages'],
-                'situation': data['profile'].get('situation of the client', '')
+                "messages": data["messages"],
+                "situation": data["profile"].get("situation of the client", ""),
             }
     except FileNotFoundError:
         print(f"[ERROR] No synthetic conversation found for index {idx}")
@@ -28,16 +34,16 @@ def format_messages(messages):
     """Format conversation messages with clear role separation."""
     formatted = []
     for msg in messages:
-        role = msg.get('role', '').upper()
+        role = msg.get("role", "").upper()
         # Replace multiple spaces and newlines with single space
-        content = ' '.join(msg.get('content', '').split())
+        content = " ".join(msg.get("content", "").split())
         formatted.append((role, content))
     return formatted
 
 
 def get_real_conversation(idx: int, dataset: str):
     """Get real conversation and situation for given index."""
-    
+
     try:
         eeyore_df = load_eeyore_dataset(dataset_type=dataset, indices=[idx])
         row = eeyore_df.iloc[0]  # Use first row since we only loaded one specific index
@@ -61,7 +67,7 @@ def get_real_conversation(idx: int, dataset: str):
         return None
 
 
-def compare_conversations(idx: int, dataset: str, data_dir: str):
+def compare_conversations(idx: int, dataset: str, patient_sim: str, data_dir: str):
     """Compare real and synthetic conversations side by side."""
     real_data = get_real_conversation(idx, dataset)
     if not real_data:
@@ -80,30 +86,30 @@ def compare_conversations(idx: int, dataset: str, data_dir: str):
     # Add messages as rows, padding shorter conversation if needed
     max_turns = max(len(real_messages), len(synthetic_messages))
     for i in range(max_turns):
-        real_msg = real_messages[i] if i < len(real_messages) else ('', '')
-        syn_msg = synthetic_messages[i] if i < len(synthetic_messages) else ('', '')
-        
+        real_msg = real_messages[i] if i < len(real_messages) else ("", "")
+        syn_msg = synthetic_messages[i] if i < len(synthetic_messages) else ("", "")
+
         # Format each message as "ROLE: content"
-        real_formatted = f"{real_msg[0]}: {real_msg[1]}" if real_msg[0] else ''
-        syn_formatted = f"{syn_msg[0]}: {syn_msg[1]}" if syn_msg[0] else ''
-        
+        real_formatted = f"{real_msg[0]}: {real_msg[1]}" if real_msg[0] else ""
+        syn_formatted = f"{syn_msg[0]}: {syn_msg[1]}" if syn_msg[0] else ""
+
         table_data.append([f"Message {i+1}", real_formatted, syn_formatted])
-    
+
     comparison_table = tabulate(
         table_data,
         headers=["", "Real", "Synthetic"],
         tablefmt="grid",
         maxcolwidths=[10, 60, 60],  # Adjust column widths
-        numalign="left"  # Align turn numbers to the left
+        numalign="left",  # Align turn numbers to the left
     )
-    
-    output_dir = Path('output/convos')
-    output_dir.mkdir(parents=True, exist_ok=True)    
-    output_path = output_dir / f'convo_{idx}.txt'
-    with open(output_path, 'w') as f:
-        f.write(comparison_table)    
+
+    output_dir = Path(f"output/{patient_sim}/{dataset}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"convo_{idx}.txt"
+    with open(output_path, "w") as f:
+        f.write(comparison_table)
     print(f"\nComparison saved to: {output_path}")
-    
+
 
 def main():
     import argparse
@@ -121,7 +127,7 @@ def main():
     
     data_dir = Path(args.data_dir) / args.psi / args.dataset
     print(data_dir)
-    compare_conversations(args.idx, args.dataset, data_dir)
+    compare_conversations(args.idx, args.dataset, args.psi, data_dir)
 
 
 if __name__ == "__main__":
