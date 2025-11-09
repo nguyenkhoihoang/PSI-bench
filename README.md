@@ -9,6 +9,15 @@ pip install -e .
 
 Create .env file inside psibench/ and put in your env variables OPENAI_API_KEY, OPENAI_BASE_URL, HF_TOKEN
 
+If you want to use model_interface, install the dependencies
+```
+conda create -n psibench python=3.11
+conda activate psibench
+bash model_interface/install.sh
+pip install -e .
+```
+
+
 ### 2. Generate synthetic conversations
 
 To generate synthetic data, specify dataset source `--dataset`  ('esc' (default), 'hope', 'annomi') and type of patient simulator you want `--psi` ('eeyore' (default), 'patientpsi', 'roleplaydoh')
