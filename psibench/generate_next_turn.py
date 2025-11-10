@@ -35,7 +35,7 @@ def parse_args():
     return args
 
 async def run_session(
-    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any]
+    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], start_turn: int = 1
 ):
     patient = PatientAgent(patient_profile=profile, config=config)
     
@@ -45,9 +45,13 @@ async def run_session(
     # return_messages.append({"role": "patient", "content": ""})
     try:
         for i in range(1, len(real_messages), 2):
-            messages.append({"role": "user", "content": ""})
-            patient_msg = await patient.respond(real_messages[:i], real_messages[i])
-            messages.append({"role": "assistant", "content": patient_msg})
+            if i < start_turn * 2:
+                messages.append({"role": "user", "content": ""})
+                messages.append({"role": "assistant", "content": ""})
+            else:
+                messages.append({"role": "user", "content": ""})
+                patient_msg = await patient.respond(real_messages[:i], real_messages[i])
+                messages.append({"role": "assistant", "content": patient_msg})
     except Exception as e:
         print(f"Session ended early due to error: {e}")
     
@@ -91,7 +95,7 @@ async def main():
                 profile["eeyore_system_prompt"] = system_prompt
 
             # Run session
-            final_state = await run_session(profile, messages, config=config)
+            final_state = await run_session(profile, messages, config=config, start_turn=args.turn_idx)
 
             # Save results
             save_session_results(final_state, output_dir, idx)
