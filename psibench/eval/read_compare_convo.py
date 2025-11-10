@@ -5,16 +5,11 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from data_loader.esc import (
-    load_esc_data_with_indices,
-    load_esc_original_data,
-    load_synthetic_data,
-)
 from tabulate import tabulate
 
-from data_loader.esc import load_esc_data_with_indices, load_esc_original_data
+from data_loader.esc import load_esc_original_data
 from data_loader.main_loader import load_eeyore_dataset
- 
+
 def load_synthetic_conversation(idx: int, data_dir: str, turn: bool=False):
     """Load synthetic conversation for given index."""
     try:
