@@ -16,9 +16,8 @@ from data_loader.esc import (
     load_esc_data,
     load_esc_data_with_indices,
     load_esc_original_data,
-    load_synthetic_data,
-    get_synthetic_indices
 )
+from data_loader.main_loader import load_synthetic_data_to_df, get_synthetic_indices
 #TODO: If use this similarity in final benchmark, make it generalize to other datasets besides ESC
 ## Situation vs Conversation: Real Convo
 def concat_client_messages(messages_list):
@@ -152,19 +151,6 @@ def analyze_dataset(df: pd.DataFrame, output_dir: str = 'output', k: int = None,
     return selected_analysis
 
 
-
-def get_synthetic_indices(data_dir: str):
-    """Get the indices from synthetic session files."""
-    data_dir = Path(data_dir)
-    indices = []
-    
-    for session_file in sorted(data_dir.glob('session_*.json')):
-        # Extract index from session_XXX.json
-        idx = int(session_file.stem.split('_')[1])
-        indices.append(idx)
-    
-    return sorted(indices)
-
 def compare_real_and_synthetic(data_dir: str, output_dir: str = 'output', k: int = None):
     """
     Compare similarity metrics between real and synthetic data.
@@ -187,7 +173,7 @@ def compare_real_and_synthetic(data_dir: str, output_dir: str = 'output', k: int
         
     real_df = load_esc_data_with_indices(synthetic_indices)
     print(f"[INFO] Loaded {len(real_df)} real conversations from eeyore_profile")
-    synthetic_df = load_synthetic_data(data_dir)
+    synthetic_df = load_synthetic_data_to_df(data_dir)
     print(f"[INFO] Loaded {len(synthetic_df)} synthetic conversations from {data_dir}")
     
     # Analyze both datasets with automatically named directories
@@ -241,7 +227,7 @@ def main():
                 print("[ERROR] --data-dir is required when using --data-type=synthetic")
                 return
             print(f"[INFO] Loading synthetic data from {args.data_dir}...")
-            df = load_synthetic_data(args.data_dir)
+            df = load_synthetic_data_to_df(args.data_dir)
             output_subdir = base_output_dir / "synthetic_analysis"
         
         if df.empty:
