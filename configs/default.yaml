@@ -3,15 +3,29 @@
 # Patient model
 patient:
   simulator: "eeyore"
+  backend: "model_interface"  # Set to "model_interface" to use model_interface backend
   model: "gpt-4.1-mini"
   temperature: 0.7
+  top_p: 1.0
+  max_tokens: 512
+  model_interface_config: "model_interface/configs/openai/gpt-4.1-mini.yaml"  # Optional override per agent
+  model_kwargs: {}
   
 # Therapist model
 therapist:
+  backend: "model_interface"
   model: "gpt-4.1-mini"
   temperature: 0.5
+  top_p: 1.0
+  max_tokens: 512
+  model_interface_config: "model_interface/configs/openai/gpt-4.1-mini.yaml"
+  model_kwargs: {}
 
 # Session parameters
 session:
   max_turns: 15
+
+# Optional shared model_interface config
+model_interface:
+  config_path: "model_interface/configs/openai/gpt-4.1-mini.yaml"
   

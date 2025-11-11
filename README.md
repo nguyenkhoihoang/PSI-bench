@@ -17,6 +17,12 @@ bash model_interface/install.sh
 pip install -e .
 ```
 
+#### Using the unified model_interface backend
+- Edit `configs/default.yaml` and set `patient.backend` / `therapist.backend` to `model_interface`.
+- Provide a config file path via `patient.model_interface_config`, `therapist.model_interface_config`, or the shared `model_interface.config_path`.
+- Config files under `model_interface/configs/**` describe OpenAI, Google, vLLM server, or offline vLLM models; feel free to copy and customize them for other open-source checkpoints.
+- All calls will now be routed through the unified interface, which batches requests with `num_workers` and lets you point PSI-bench to any provider that supports the OpenAI chat schema.
+
 
 ### 2. Generate synthetic conversations
 
@@ -25,12 +31,13 @@ To generate synthetic data, specify dataset source `--dataset`  ('esc' (default)
 AI patient - AI therapist convo:
 
 ```
-python -m psibench.generate_conversations --dataset esc
+python -m psibench.generate_conversations --dataset esc --concurrency 8
 ```
+> When both `patient.backend` and `therapist.backend` are set to `model_interface`, `--concurrency` controls how many sessions advance in lockstep. Each turn batches all active conversations into a single `model_interface.generate()` call, so increase it to saturate your provider.
 
 AI patient respond given previous history (`--turn_idx` default=0)
 ```
-python -m psibench.generate_next_turn --dataset --turn_idx 3
+python -m psibench.generate_next_turn --dataset esc --turn_idx 3 --concurrency 8
 ```
 
 

@@ -1,7 +1,7 @@
 import os
 from typing import Literal
 from datasets import load_dataset
-from data_loader.utils import merge_consecutive_messages
+from .utils import merge_consecutive_messages
 import pandas as pd
 from pathlib import Path
 import json
