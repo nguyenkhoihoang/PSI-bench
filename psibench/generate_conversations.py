@@ -44,7 +44,7 @@ def parse_args():
 
 
 async def run_session(
-    profile: Dict[str, Any], config: Dict[str, Any], psi: str = "eeyore"
+    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], psi: str = "eeyore"
 ) -> Dict[str, Any]:
     """Run a simulated counseling session."""
     print("Running Session")
@@ -55,6 +55,8 @@ async def run_session(
     messages = []
     max_turns = config["session"]["max_turns"]
 
+    if real_messages[0]["role"] == "assistant":
+        messages.append({"role": "assistant", "content": ""})
     try:
         # Start conversation with therapist
         therapist_msg = therapist.respond(messages)
@@ -112,12 +114,13 @@ async def main():
     for idx, row in tqdm(df.iterrows(), total=len(df)):
         try:
             profile = json.loads(row["profile"])
+            messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
                 profile["eeyore_system_prompt"] = system_prompt
 
             # Run session
-            final_state = await run_session(profile, config=config, psi=args.psi)
+            final_state = await run_session(profile, messages, config=config, psi=args.psi)
 
             # Save results
             save_session_results(final_state, output_dir, idx)
