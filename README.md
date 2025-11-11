@@ -22,9 +22,17 @@ pip install -e .
 
 To generate synthetic data, specify dataset source `--dataset`  ('esc' (default), 'hope', 'annomi') and type of patient simulator you want `--psi` ('eeyore' (default), 'patientpsi', 'roleplaydoh')
 
+AI patient - AI therapist convo:
+
 ```
 python -m psibench.generate_conversations --dataset esc
 ```
+
+AI patient respond given previous history (`--turn_idx` default=0)
+```
+python -m psibench.generate_next_turn --dataset --turn_idx 3
+```
+
 
 Note: If have error like `ModuleNotFoundError: No module named 'data_loader'`
 export PYTHONPATH to your repo/psi-bench, e.g.

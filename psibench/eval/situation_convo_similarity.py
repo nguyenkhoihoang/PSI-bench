@@ -12,12 +12,9 @@ from rouge_score import rouge_scorer
 from bert_score import score
 import torch
 
-from data_loader.esc import (
-    load_esc_data,
-    load_esc_data_with_indices,
-    load_esc_original_data,
-)
-from data_loader.main_loader import load_synthetic_data_to_df, get_synthetic_indices
+from data_loader.esc import load_esc_original_data
+from data_loader.main_loader import load_synthetic_data_to_df, load_eeyore_dataset
+from data_loader.utils import get_synthetic_indices
 #TODO: If use this similarity in final benchmark, make it generalize to other datasets besides ESC
 ## Situation vs Conversation: Real Convo
 def concat_client_messages(messages_list):
@@ -170,8 +167,8 @@ def compare_real_and_synthetic(data_dir: str, output_dir: str = 'output', k: int
     synthetic_indices = get_synthetic_indices(data_dir)    
     if k:
         synthetic_indices = synthetic_indices[:k]
-        
-    real_df = load_esc_data_with_indices(synthetic_indices)
+
+    real_df = load_eeyore_dataset('esc', synthetic_indices)
     print(f"[INFO] Loaded {len(real_df)} real conversations from eeyore_profile")
     synthetic_df = load_synthetic_data_to_df(data_dir)
     print(f"[INFO] Loaded {len(synthetic_df)} synthetic conversations from {data_dir}")
