@@ -40,29 +40,88 @@ os.makedirs(out_path, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_conversation(data, conv_number):
-    # Inputs real conversational data - outputs the chosen conversation
-    # Remove conv_number logic and return conversation_texts if all conversations are desired
-    conversation_texts = []  # will store long strings
+from typing import List, Dict, Any
+import pandas as pd
 
-    for convo in data:
-        lines = []
-        for turn in convo["dialog"]:
-            role = turn["speaker"]
-            content = turn["content"].strip().replace("\n", " ")
 
-            if role == "supporter":
-                lines.append(f"Therapist: {content}")
-            elif role == "seeker":
-                lines.append(f"Client: {content}")
-            else:
-                lines.append(f"{role.capitalize()}: {content}")
+def load_conversation(messages) -> str:
+    """
+    Format one full conversation (list of {role, content}) into Therapist/Client lines.
+    Maps: assistant -> Therapist, user -> Client.
+    """
+    lines = []
+    print(f"Started - Type of messages: {type(messages)}")
+    
+    # Handle pandas Series
+    if hasattr(messages, 'tolist'):
+        # Convert Series to list
+        messages_list = messages.tolist()
+    elif hasattr(messages, 'values'):
+        # Get values from Series
+        messages_list = messages.values.tolist()
+    elif isinstance(messages, list):
+        messages_list = messages
+    else:
+        # Try to iterate directly
+        messages_list = list(messages)
+    
+    print(f"Converted to list with {len(messages_list)} items")
+    
+    for i, turn in enumerate(messages_list):
+        print(f"Processing turn {i}, type: {type(turn)}")
+        
+        # Handle different data structures for turn
+        if isinstance(turn, dict):
+            role = str(turn.get("role", "")).lower().strip()
+            content = str(turn.get("content", "")).strip().replace("\n", " ")
+        elif isinstance(turn, str):
+            # If it's a string, try to parse it as JSON
+            try:
+                import json
+                turn_dict = json.loads(turn)
+                role = str(turn_dict.get("role", "")).lower().strip()
+                content = str(turn_dict.get("content", "")).strip().replace("\n", " ")
+            except:
+                print(f"Could not parse string as JSON: {turn[:100]}")
+                continue
+        else:
+            print(f"Unexpected turn format: {type(turn)}")
+            print(f"Turn content: {turn}")
+            continue
+            
+        if role == "user":
+            lines.append(f"Therapist: {content}")
+        elif role == "assistant":
+            lines.append(f"Client: {content}")
+        else:
+            lines.append(f"{role.capitalize() or 'Unknown'}: {content}")
+    
+    print("load_conversation completed")
+    return "\n".join(lines)
 
-        # join all turns into one big string for the conversation
-        convo_text = "\n".join(lines)
-        conversation_texts.append(convo_text)
-    chosen_convo = conversation_texts[conv_number]
-    return chosen_convo
+# def load_conversation(data, conv_number):
+#     # Inputs real conversational data - outputs the chosen conversation
+#     # Remove conv_number logic and return conversation_texts if all conversations are desired
+#     conversation_texts = []  # will store long strings
+
+#     for convo in data:
+#         lines = []
+#         for turn in convo["dialog"]:
+#             role = turn["speaker"]
+#             content = turn["content"].strip().replace("\n", " ")
+
+#             if role == "supporter":
+#                 lines.append(f"Therapist: {content}")
+#             elif role == "seeker":
+#                 lines.append(f"Client: {content}")
+#             else:
+#                 lines.append(f"{role.capitalize()}: {content}")
+
+#         # join all turns into one big string for the conversation
+#         convo_text = "\n".join(lines)
+#         conversation_texts.append(convo_text)
+#     chosen_convo = conversation_texts[conv_number]
+#     return chosen_convo
 
 
 def is_json_serializable(obj):
@@ -130,17 +189,20 @@ def format_patient_psi_prompt_from_ccd(
     )
     return prompt
 
-def generate_chain(transcript_file, conv_number):
+def generate_chain(data):
     # with open(os.path.join(data_path, transcript_file), 'r') as f:
     #     lines = f.readlines()
     # --- Load JSON ---
     # with open("/u/adeora/PSI-bench/data/real/ESConv.json", "r") as f:
     #     data = json.load(f)
-    with open(os.path.join(data_path, transcript_file), "r") as f:
-        data = json.load(f)
+   
+    # with open(os.path.join(data_path, "yoyoy"), "r") as f:
+    #     data = json.load(f)
+    # print("Started with open(os.path.join(data_pa")
 
 
-    lines = load_conversation(data,conv_number)
+    lines = load_conversation(data)
+    print(lines)
 
     query = "Based on the therapy session transcript, summarize the patient's personal history following the below instructions. Not that `Client` means the patient in the transcript.\n\n{lines}".format(
         lines=lines)
@@ -166,7 +228,7 @@ def generate_chain(transcript_file, conv_number):
 
         if is_json_serializable(_output):
             # Default patient name
-            patient_name = f"Patient{conv_number}"
+            patient_name = f"Patient"
 
             # --- Determine output filenames ---
             base_name = f"{patient_name}_CCD"
@@ -210,7 +272,7 @@ def main():
     parser.add_argument('--conv-number', type=int, default=0,
                     help="Conversation index in the dataset")
     args = parser.parse_args()
-    generate_chain(args.transcript_file, args.conv_number)
+    generate_chain(args.transcript_file)
 
 
 if __name__ == "__main__":
