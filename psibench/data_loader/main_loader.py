@@ -1,7 +1,7 @@
 import os
 from typing import Literal
 from datasets import load_dataset
-from data_loader.esc import load_esc_data, load_esc_data_with_indices
+from data_loader.utils import merge_consecutive_messages
 import pandas as pd
 from pathlib import Path
 import json
@@ -11,11 +11,12 @@ def load_eeyore_from_hf(dataset_type: Literal["ESC","HOPE", "AnnoMI"], indices: 
     """Load specific datasets from the Eeyore dataset."""
     data = load_dataset("liusiyang/eeyore_profile", split='train', token=os.getenv("HF_TOKEN"))
     df = data.to_pandas()
-    
+    df['messages'] = df['messages'].apply(merge_consecutive_messages)
     if indices:
         # Directly get rows with matching indices
         matched_df = df.loc[indices].copy()
         return matched_df[matched_df['source'] == dataset_type].copy()
+    
     return df[df['source'] == dataset_type]
 
 def load_eeyore_dataset(dataset_type: str, indices: list = None):
@@ -34,9 +35,7 @@ def load_eeyore_dataset(dataset_type: str, indices: list = None):
     """
     match dataset_type:
         case "esc":
-            if indices:
-                return load_esc_data_with_indices(original_indices=indices)
-            return load_esc_data()
+            return load_eeyore_from_hf(dataset_type="ESC", indices=indices)
         case "hope":
             return load_eeyore_from_hf(dataset_type="HOPE", indices=indices)
         case "annomi":
@@ -44,18 +43,6 @@ def load_eeyore_dataset(dataset_type: str, indices: list = None):
         case _:
             raise ValueError(f"Unsupported dataset type: {dataset_type}")
 
-# Load locally saved synthetic data from local path
-def get_synthetic_indices(data_dir: str):
-    """Get the indices from synthetic session files."""
-    data_dir = Path(data_dir)
-    indices = []
-    
-    for session_file in sorted(data_dir.glob('session_*.json')):
-        # Extract index from session_XXX.json
-        idx = int(session_file.stem.split('_')[1])
-        indices.append(idx)
-    
-    return sorted(indices)
 
 def load_synthetic_data_to_df(data_dir: str):
     """Load synthetic session data from directory 
