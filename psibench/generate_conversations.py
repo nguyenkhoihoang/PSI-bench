@@ -107,26 +107,31 @@ async def main():
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Shared setup variables ---
-    transcript_file = "ESConv.json"   # TODO: make configurable later
-    num_convs = args.N or 5           # number of conversations to generate
+    df = load_eeyore_dataset(args.dataset)
 
-    if args.psi == "eeyore":
-        df = load_eeyore_dataset(args.dataset)
-        
-        # Limit number of conversations if specified
-        if args.N is not None:
-            df = df.head(args.N)
+    if args.N is not None:
+        df = df.head(args.N)
 
-        print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
 
-        # Generate conversations
-        for idx, row in tqdm(df.iterrows(), total=len(df)):
+    for idx, row in tqdm(df.iterrows(), total=len(df)):
             try:
                 profile = json.loads(row["profile"])
+                messages = df.messages
                 if args.psi == "eeyore":
                     system_prompt, _, _ = prepare_prompt_from_profile(profile)
                     profile["eeyore_system_prompt"] = system_prompt
+
+                if args.psi == "patientpsi":
+                    print("Started doing thi")
+                    #generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
+                    system_prompt = generate_chain(messages)
+                    print("system_prompt = generate_chain(messages)")
+                    print(system_prompt)
+                    profile = {"system_prompt": system_prompt}
+                    final_state = await run_session(profile, config=config, psi=args.psi)
+                    save_session_results(final_state, output_dir, i)
+
 
                 # Run session
                 final_state = await run_session(profile, config=config, psi=args.psi)
@@ -138,28 +143,7 @@ async def main():
                 print(f"Error in session {idx}: {e}")
                 continue
 
-        print(f"\nFinished! Session transcripts saved to {output_dir}/")
-
-    elif args.psi == "patientpsi":
-        print(f"Generating {num_convs} Patient-Ψ prompts from {transcript_file}")
-        for i in range(num_convs):
-            try:
-                #Generate system prompt for i_th convo
-                system_prompt = generate_chain(transcript_file, i)
-                profile = {"system_prompt": system_prompt}
-                final_state = await run_session(profile, config=config, psi=args.psi)
-                save_session_results(final_state, output_dir, i)
-
-            except Exception as e:
-                print(f"Error in session {i}: {e}")
-                continue
-    else:
-        raise ValueError(f"Unknown psi type: {args.psi}")
-
-    print(f"\n✅ Finished! Session transcripts saved to {output_dir}/")
-
-
-
+    print(f"\nFinished! Session transcripts saved to {output_dir}/")
 
 if __name__ == "__main__":
     asyncio.run(main())
