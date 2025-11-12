@@ -7,7 +7,7 @@ def create_patient_prompt(psi: str) -> ChatPromptTemplate:
     """
     if psi == "eeyore":
         return create_eeyore_prompt()
-    elif psi == "patient_psi":
+    elif psi == "patientpsi":
         return create_patient_psi_prompt()
     elif psi == "roleplaydoh":
         return create_roleplay_doh_prompt()
@@ -31,8 +31,16 @@ def create_eeyore_prompt() -> ChatPromptTemplate:
 
 
 def create_patient_psi_prompt() -> ChatPromptTemplate:
-    # TODO
-    pass
+    system_message = """{system_prompt}
+
+    Conversation so far:
+    {conversation_history}
+
+    Therapist's latest message: {therapist_message}
+
+    """
+    return ChatPromptTemplate.from_messages([("system", system_message)])
+
 
 
 def create_roleplay_doh_prompt() -> ChatPromptTemplate:

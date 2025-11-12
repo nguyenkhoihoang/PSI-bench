@@ -8,7 +8,7 @@ https://github.com/ruiyiw/patient-psi/tree/main/python/generation
 from langchain.output_parsers import PydanticOutputParser
 from langchain.chat_models import ChatOpenAI
 
-from generation_template import GenerationModel
+from models.generation_template import GenerationModel
 from dotenv import load_dotenv, find_dotenv
 import os
 import json
@@ -188,6 +188,8 @@ def generate_chain(transcript_file, conv_number):
             with open(out_prompt_path, "w") as f:
                 f.write(psi_prompt)
             logger.info(f"✅ Patient-Ψ prompt saved to {out_prompt_path}")
+
+            return psi_prompt
             break
         else:
             attempts += 1
@@ -198,6 +200,7 @@ def generate_chain(transcript_file, conv_number):
                     "Max attempts reached. Could not generate a JSON serializable output.")
                 raise ValueError(
                     "Could not generate a JSON serializable output after maximum attempts.")
+            
 
 
 def main():
