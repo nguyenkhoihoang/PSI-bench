@@ -13,10 +13,16 @@ from tqdm import tqdm
 load_dotenv()
 
 
-from data_loader.main_loader import load_eeyore_dataset
-from agents.patient import PatientAgent
-from agents.therapist import TherapistAgent
-from models.eeyore import prepare_prompt_from_profile
+# from data_loader.main_loader import load_eeyore_dataset
+# from agents.patient import PatientAgent
+# from agents.therapist import TherapistAgent
+# from models.eeyore import prepare_prompt_from_profile
+from psibench.data_loader.main_loader import load_eeyore_dataset
+from psibench.agents.patient import PatientAgent
+from psibench.agents.therapist import TherapistAgent
+from psibench.models.eeyore import prepare_prompt_from_profile
+from models.patient_psi import generate_chain
+from models.generation_template import GenerationModel
 
 
 def parse_args():
@@ -47,10 +53,11 @@ async def run_session(
     profile: Dict[str, Any], config: Dict[str, Any], psi: str = "eeyore"
 ) -> Dict[str, Any]:
     """Run a simulated counseling session."""
-    print("Running Session")
+
     # Initialize agents
     patient = PatientAgent(patient_profile=profile, config=config)
     therapist = TherapistAgent(config=config)
+
 
     messages = []
     max_turns = config["session"]["max_turns"]
@@ -95,38 +102,63 @@ async def main():
     if args.max_turns:
         config["session"]["max_turns"] = args.max_turns
 
-    # config["patient"]["simulator"] = args.psi
+    config["patient"]["simulator"] = args.psi
 
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    df = load_eeyore_dataset(args.dataset)
-    
-    # Limit number of conversations if specified
-    if args.N is not None:
-        df = df.head(args.N)
 
-    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    # --- Shared setup variables ---
+    transcript_file = "ESConv.json"   # TODO: make configurable later
+    num_convs = args.N or 5           # number of conversations to generate
 
-    # Generate conversations
-    for idx, row in tqdm(df.iterrows(), total=len(df)):
-        try:
-            profile = json.loads(row["profile"])
-            if args.psi == "eeyore":
-                system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_system_prompt"] = system_prompt
+    if args.psi == "eeyore":
+        df = load_eeyore_dataset(args.dataset)
+        
+        # Limit number of conversations if specified
+        if args.N is not None:
+            df = df.head(args.N)
 
-            # Run session
-            final_state = await run_session(profile, config=config, psi=args.psi)
+        print(f"Generating {len(df)} conversations from {args.dataset} dataset")
 
-            # Save results
-            save_session_results(final_state, output_dir, idx)
+        # Generate conversations
+        for idx, row in tqdm(df.iterrows(), total=len(df)):
+            try:
+                profile = json.loads(row["profile"])
+                if args.psi == "eeyore":
+                    system_prompt, _, _ = prepare_prompt_from_profile(profile)
+                    profile["eeyore_system_prompt"] = system_prompt
 
-        except Exception as e:
-            print(f"Error in session {idx}: {e}")
-            continue
+                # Run session
+                final_state = await run_session(profile, config=config, psi=args.psi)
 
-    print(f"\nFinished! Session transcripts saved to {output_dir}/")
+                # Save results
+                save_session_results(final_state, output_dir, idx)
+
+            except Exception as e:
+                print(f"Error in session {idx}: {e}")
+                continue
+
+        print(f"\nFinished! Session transcripts saved to {output_dir}/")
+
+    elif args.psi == "patientpsi":
+        print(f"Generating {num_convs} Patient-Ψ prompts from {transcript_file}")
+        for i in range(num_convs):
+            try:
+                #Generate system prompt for i_th convo
+                system_prompt = generate_chain(transcript_file, i)
+                profile = {"system_prompt": system_prompt}
+                final_state = await run_session(profile, config=config, psi=args.psi)
+                save_session_results(final_state, output_dir, i)
+
+            except Exception as e:
+                print(f"Error in session {i}: {e}")
+                continue
+    else:
+        raise ValueError(f"Unknown psi type: {args.psi}")
+
+    print(f"\n✅ Finished! Session transcripts saved to {output_dir}/")
+
+
 
 
 if __name__ == "__main__":
