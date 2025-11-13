@@ -34,7 +34,9 @@ The synthetic data will be saved in data/synthetic/{psi}/{dataset}
 
 For e.g. `data/synthetic/eeyore/esc/`
 
-### 3. Compare real and synthetic convo
+### 3. Evaluation
+
+#### Compare real and synthetic convo
 Specify some index of session u want to compare. e.g. (Look for idx in synthetic data folder)
 
 Note: Only ESC has real situation from original dataset. Others just have situation loaded from eeyore.
@@ -42,6 +44,13 @@ Note: Only ESC has real situation from original dataset. Others just have situat
 ```
 python -m psibench.eval.read_compare_convo 3
 python -m psibench.eval.read_compare_convo --dataset annomi 39
+```
+#### P,T,C Classification
+```
+python -m psibench.eval.ptc_classification \
+    --dataset esc \
+    --synthetic-dir data/synthetic/roleplaydoh/esc \
+    --compare \
 ```
 <!-- (Later: haven't checked since delta GPU been down lately)
 Run eval comparison on delta (may need to edit your account in sbatch script) 
