@@ -12,12 +12,16 @@ from data_loader.main_loader import load_eeyore_dataset
 
 def load_synthetic_conversation(idx: int, data_dir: str, turn: bool=False):
     """Load synthetic conversation for given index."""
+    print("Load synthetic conversation for given index.")
     try:
         if turn:
             file_path = Path(data_dir) / f'session_{idx}_turn.json'
+            print("file_path: ", file_path)
         else:
             file_path = Path(data_dir) / f'session_{idx}.json'
+            print("file_path: ", file_path)
         with open(file_path, 'r') as f:
+            print("opened")
             data = json.load(f)
             return {
                 "messages": data["messages"],

@@ -114,8 +114,8 @@ async def main():
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    if args.max_turns:
-        config["session"]["max_turns"] = args.max_turns
+    # if args.max_turns:
+    #     config["session"]["max_turns"] = args.max_turns
 
     config["patient"]["simulator"] = args.psi
 
@@ -132,24 +132,21 @@ async def main():
     for idx, row in tqdm(df.iterrows(), total=len(df)):
         try:
             profile = json.loads(row["profile"])
-            messages = df.messages
+            real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
                 profile["eeyore_system_prompt"] = system_prompt
 
-            if args.psi == "patientpsi":
+            elif args.psi == "patientpsi":
                 print("Started doing thi")
-                #generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
-                system_prompt = generate_chain(messages)
+                # generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
+                system_prompt = generate_chain(real_messages)
                 print("system_prompt = generate_chain(messages)")
                 print(system_prompt)
                 profile = {"system_prompt": system_prompt}
-                final_state = await run_session(profile, config=config, psi=args.psi)
-                save_session_results(final_state, output_dir, i)
-
 
             # Run session
-            final_state = await run_session(profile, config=config, psi=args.psi)
+            final_state = await run_session(profile, real_messages, config=config, psi=args.psi)
 
             # Save results
             save_session_results(final_state, output_dir, idx)
