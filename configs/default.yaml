@@ -6,6 +6,7 @@ patient:
   model: "gpt-4.1-mini"
   temperature: 0.7
   max_attempts: 5
+  conversation_type: "verbose"
   
 # Therapist model
 therapist:
