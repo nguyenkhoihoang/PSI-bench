@@ -13,17 +13,15 @@ from tqdm import tqdm
 load_dotenv()
 
 
-# from data_loader.main_loader import load_eeyore_dataset
-# from agents.patient import PatientAgent
-# from agents.therapist import TherapistAgent
-# from models.eeyore import prepare_prompt_from_profile
-from psibench.data_loader.main_loader import load_eeyore_dataset
-from psibench.agents.patient import PatientAgent
-from psibench.agents.therapist import TherapistAgent
-from psibench.models.eeyore import prepare_prompt_from_profile
+from data_loader.main_loader import load_eeyore_dataset
+from agents.patient import PatientAgent
+from agents.therapist import TherapistAgent
+from models.eeyore import prepare_prompt_from_profile
 from models.patient_psi import generate_chain
-from models.generation_template import GenerationModel
-
+# from psibench.data_loader.main_loader import load_eeyore_dataset
+# from psibench.agents.patient import PatientAgent
+# from psibench.agents.therapist import TherapistAgent
+# from psibench.models.eeyore import prepare_prompt_from_profile
 
 def parse_args():
     """Parse command line arguments."""
@@ -49,8 +47,7 @@ def parse_args():
 
 
 async def run_session(
-    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], psi: str = "eeyore"
-) -> Dict[str, Any]:
+    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any]) -> Dict[str, Any]:
     """Run a simulated counseling session matching the length of real messages.
     
     Args:
@@ -103,6 +100,7 @@ def save_session_results(
     """Save session results to JSON file."""
     output_path = output_dir / f"session_{session_id}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # print(f"\033[91mSaving session results to {output_path}\033[0m")
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(session_data, f, indent=2, ensure_ascii=False)
@@ -113,11 +111,6 @@ async def main():
 
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
-
-    # if args.max_turns:
-    #     config["session"]["max_turns"] = args.max_turns
-
-    config["patient"]["simulator"] = args.psi
 
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -138,16 +131,14 @@ async def main():
                 profile["eeyore_system_prompt"] = system_prompt
 
             elif args.psi == "patientpsi":
-                print("Started doing thi")
                 # generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
                 system_prompt = generate_chain(real_messages)
-                print("system_prompt = generate_chain(messages)")
                 print(system_prompt)
                 profile = {"system_prompt": system_prompt}
 
             # Run session
-            final_state = await run_session(profile, real_messages, config=config, psi=args.psi)
-
+            config["patient"]["simulator"] = args.psi
+            final_state = await run_session(profile, real_messages, config=config)
             # Save results
             save_session_results(final_state, output_dir, idx)
 
