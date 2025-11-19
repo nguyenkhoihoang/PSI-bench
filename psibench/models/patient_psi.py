@@ -6,7 +6,7 @@ https://github.com/ruiyiw/patient-psi/tree/main/python/generation
 """
 
 from langchain.output_parsers import PydanticOutputParser
-from langchain.chat_models import ChatOpenAI
+from langchain_litellm import ChatLiteLLM
 
 from models.generation_template import GenerationModel
 from dotenv import load_dotenv, find_dotenv
@@ -189,7 +189,7 @@ def format_patient_psi_prompt_from_ccd(
     )
     return prompt
 
-def generate_chain(data):
+def generate_chain(data, config):
     # with open(os.path.join(data_path, transcript_file), 'r') as f:
     #     lines = f.readlines()
     # --- Load JSON ---
@@ -214,14 +214,18 @@ def generate_chain(data):
         "query": query,
         "format_instructions": pydantic_parser.get_format_instructions()
     })
-    llm = ChatOpenAI(
-        model=os.getenv('GENERATOR_MODEL'),
-        temperature=os.getenv('GENERATOR_MODEL_TEMP'),
+    patient = config.get('patient')
+    max_attempts = patient.get('max_attempts')
+    llm = ChatLiteLLM(
+        model=patient.get('model'),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+        temperature=patient.get('temperature'),
         max_retries=2,
     )
     attempts = 0
 
-    while attempts < int(os.getenv('MAX_ATTEMPTS')):
+    while attempts < max_attempts:
         _output = pydantic_parser.parse(
             llm.invoke(_input).content).model_dump()
         print(_output)
@@ -256,8 +260,8 @@ def generate_chain(data):
         else:
             attempts += 1
             logger.warning(
-                f"Output is not JSON serializable. Attempting {attempts}/{int(os.getenv('MAX_ATTEMPTS'))}")
-            if attempts == int(os.getenv('MAX_ATTEMPTS')):
+                f"Output is not JSON serializable. Attempting {attempts}/{max_attempts}")
+            if attempts == max_attempts:
                 logger.error(
                     "Max attempts reached. Could not generate a JSON serializable output.")
                 raise ValueError(
