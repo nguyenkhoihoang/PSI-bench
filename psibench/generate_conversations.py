@@ -128,13 +128,12 @@ async def main():
             real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_system_prompt"] = system_prompt
+                profile["system_prompt"] = system_prompt
 
             elif args.psi == "patientpsi":
                 # generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
-                system_prompt = generate_chain(real_messages)
-                print(system_prompt)
-                profile = {"system_prompt": system_prompt}
+                system_prompt = generate_chain(real_messages, config)
+                profile["system_prompt"] = system_prompt
 
             # Run session
             config["patient"]["simulator"] = args.psi
