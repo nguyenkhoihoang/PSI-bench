@@ -15,7 +15,6 @@ from data_loader.main_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
 from models.eeyore import prepare_prompt_from_profile
 from models.patient_psi import generate_chain
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generated simulated next turn patient response"
@@ -35,48 +34,27 @@ def parse_args():
     return args
 
 async def run_session(
-    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], start_turn: int = 0
+    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], start_turn: int = 1
 ):
-    """Generate a single patient response for the requested therapist turn."""
-    if not real_messages:
-        raise ValueError("Conversation is empty—cannot generate next turn.")
-
     patient = PatientAgent(patient_profile=profile, config=config)
-
-    therapist_roles = {"user", "therapist"}
-    patient_roles = {"assistant", "patient"}
-
-    therapist_indices = [
-        idx
-        for idx, msg in enumerate(real_messages)
-        if msg.get("role", "").lower() in therapist_roles
-    ]
-
-    if not therapist_indices:
-        raise ValueError("No therapist turns found in conversation.")
-    if start_turn >= len(therapist_indices):
-        raise ValueError(
-            f"Requested therapist turn {start_turn} but only {len(therapist_indices)} available."
-        )
-
-    target_idx = therapist_indices[start_turn]
-    therapist_turn = real_messages[target_idx]
-    therapist_message = therapist_turn.get("content", "")
-
-    conversation_history = real_messages[:target_idx]
-    patient_msg = await patient.respond(conversation_history, therapist_message)
-
-    patient_role = next(
-        (msg.get("role") for msg in real_messages if msg.get("role") in patient_roles),
-        "assistant",
-    )
-
-    generated_messages = conversation_history + [
-        therapist_turn,
-        {"role": patient_role, "content": patient_msg},
-    ]
-
-    return {"messages": generated_messages, "profile": profile}
+    
+    messages = []
+    if real_messages[0]["role"] == "assistant":
+        messages.append({"role": "assistant", "content": ""})
+    # return_messages.append({"role": "patient", "content": ""})
+    try:
+        for i in range(1, len(real_messages), 2):
+            if i < start_turn * 2:
+                messages.append({"role": "user", "content": ""})
+                messages.append({"role": "assistant", "content": ""})
+            else:
+                messages.append({"role": "user", "content": ""})
+                patient_msg = await patient.respond(real_messages[:i], real_messages[i])
+                messages.append({"role": "assistant", "content": patient_msg})
+    except Exception as e:
+        print(f"Session ended early due to error: {e}")
+    
+    return {"messages": messages, "profile": profile}
 
 def save_session_results(
     session_data: Dict[str, Any], output_dir: Path, session_id: int
@@ -95,7 +73,6 @@ async def main():
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
     config["patient"]["simulator"] = args.psi
-
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -105,7 +82,7 @@ async def main():
     if args.N is not None:
         df = df.head(args.N)
 
-    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
 
     # Generate conversations
     for idx, row in tqdm(df.iterrows(), total=len(df)):
@@ -114,15 +91,12 @@ async def main():
             real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_system_prompt"] = system_prompt
+                profile["system_prompt"] = system_prompt
             elif args.psi == "patientpsi":
-                system_prompt = generate_chain(real_messages)
-                profile = {"system_prompt": system_prompt}
-
+                system_prompt = generate_chain(real_messages, config)
+                profile["system_prompt"] = system_prompt
             # Run session
-            final_state = await run_session(
-                profile, real_messages, config=config, start_turn=args.turn_idx
-            )
+            final_state = await run_session(profile, real_messages, config=config, start_turn=args.turn_idx)
 
             # Save results
             save_session_results(final_state, output_dir, idx)

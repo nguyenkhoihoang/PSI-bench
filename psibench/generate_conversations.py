@@ -100,7 +100,6 @@ def save_session_results(
     """Save session results to JSON file."""
     output_path = output_dir / f"session_{session_id}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # print(f"\033[91mSaving session results to {output_path}\033[0m")
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(session_data, f, indent=2, ensure_ascii=False)
@@ -111,7 +110,7 @@ async def main():
 
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
-
+    config["patient"]["simulator"] = args.psi
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -120,7 +119,8 @@ async def main():
     if args.N is not None:
         df = df.head(args.N)
 
-    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
+
 
     for idx, row in tqdm(df.iterrows(), total=len(df)):
         try:
@@ -136,7 +136,6 @@ async def main():
                 profile["system_prompt"] = system_prompt
 
             # Run session
-            config["patient"]["simulator"] = args.psi
             final_state = await run_session(profile, real_messages, config=config)
             # Save results
             save_session_results(final_state, output_dir, idx)
