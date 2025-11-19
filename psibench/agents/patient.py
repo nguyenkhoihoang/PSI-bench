@@ -10,7 +10,6 @@ from prompts.patient_prompt import create_patient_prompt
 from pydantic import BaseModel, Field
 
 from psibench.models.roleplay_doh import roleplay_doh_rewrite_response
-from langchain_core.prompts import ChatPromptTemplate
 
 load_dotenv()
 
@@ -75,7 +74,6 @@ class PatientAgent:
         Returns:
             The patient's response
         """
-        # Prepare inputs based on prompt variant
         if self.psi == "eeyore":
             inputs = {
                 "eeyore_system_prompt": self.patient_profile.get(
@@ -87,6 +85,7 @@ class PatientAgent:
             # print(self.prompt.format(**inputs)) # Commented out print statement
             response: PatientResponse = await self.chain.ainvoke(inputs)
             return response.response
+        
         elif self.psi == "roleplaydoh":
 
             # Initial response generation using a basic prompt
@@ -111,6 +110,7 @@ class PatientAgent:
             )
 
             return refined_response
+        
         elif self.psi == "patientpsi":
             #The patient profile consists of the system prompt itself
             inputs = {
