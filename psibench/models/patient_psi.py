@@ -234,26 +234,26 @@ def generate_chain(data, config):
             # Default patient name
             patient_name = f"Patient"
 
-            # --- Determine output filenames ---
-            base_name = f"{patient_name}_CCD"
-            out_json_path = os.path.join(out_path, f"{base_name}.json")
-            out_prompt_path = os.path.join(out_path, f"{patient_name}_prompt.txt")
+            # # --- Determine output filenames ---
+            # base_name = f"{patient_name}_CCD"
+            # out_json_path = os.path.join(out_path, f"{base_name}.json")
+            # out_prompt_path = os.path.join(out_path, f"{patient_name}_prompt.txt")
 
-            # --- Save CCD JSON (structured) ---
-            with open(out_json_path, "w") as f:
-                json.dump(_output, f, indent=4)
-            logger.info(f"✅ CCD output saved to {out_json_path}")
+            # # --- Save CCD JSON (structured) ---
+            # with open(out_json_path, "w") as f:
+            #     json.dump(_output, f, indent=4)
+            # logger.info(f"✅ CCD output saved to {out_json_path}")
 
             psi_prompt = format_patient_psi_prompt_from_ccd(
                 ccd = _output,
-                patient_type_content = "verbose",
+                patient_type_content = config.get('patient').get('conversation_type'),
                 name=patient_name
             )
 
-            # --- Save Patient-Psi prompt text ---
-            with open(out_prompt_path, "w") as f:
-                f.write(psi_prompt)
-            logger.info(f"✅ Patient-Ψ prompt saved to {out_prompt_path}")
+            # # --- Save Patient-Psi prompt text ---
+            # with open(out_prompt_path, "w") as f:
+            #     f.write(psi_prompt)
+            # logger.info(f"✅ Patient-Ψ prompt saved to {out_prompt_path}")
 
             return psi_prompt
             break
