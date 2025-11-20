@@ -8,7 +8,7 @@ SSH to the dt-login04 node which has CUDA 12.8 installed.
 ```bash
 nvcc --version
 ```
-Verify that CUDA version 12.8 is available.
+Verify that CUDA version 12.8 is available. You might be redirected to u/your_account/ so `cd` to your code repo folder again when u run code.
 
 ## Installation
 
@@ -43,7 +43,7 @@ srun -A bfjp-delta-gpu --time=01:00:00 --nodes=1 --ntasks-per-node=1 --cpus-per-
 ## Usage
 
 ### Launching the Server
-
+0. Activate conda environment again after receive gpu: `conda activate vllm`
 1. Start the vLLM server:
    ```bash
    bash vllm_serve/launch.sh
