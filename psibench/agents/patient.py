@@ -54,8 +54,12 @@ class PatientAgent:
         )
 
         self.psi = config.get("patient").get("simulator")
+
         self.prompt = create_patient_prompt(psi=self.psi)
+
+        
         self.chain = self.prompt | self.llm.with_structured_output(PatientResponse)
+
 
     async def respond(
         self, conversation_history: list[Dict[str, str]], therapist_message: str
@@ -70,7 +74,6 @@ class PatientAgent:
         Returns:
             The patient's response
         """
-        # Prepare inputs based on prompt variant
         if self.psi == "eeyore":
             inputs = {
                 "eeyore_system_prompt": self.patient_profile.get(
@@ -82,6 +85,7 @@ class PatientAgent:
             # print(self.prompt.format(**inputs)) # Commented out print statement
             response: PatientResponse = await self.chain.ainvoke(inputs)
             return response.response
+        
         elif self.psi == "roleplaydoh":
 
             # Initial response generation using a basic prompt
@@ -106,6 +110,17 @@ class PatientAgent:
             )
 
             return refined_response
+        
+        elif self.psi == "patientpsi":
+            #The patient profile consists of the system prompt itself
+            inputs = {
+                "system_prompt": self.patient_profile,
+                "conversation_history": self._format_history(conversation_history),
+                "therapist_message": therapist_message,
+            }
+            response: PatientResponse = await self.chain.ainvoke(inputs)
+            return response.response
+            
         else:
             pass
 

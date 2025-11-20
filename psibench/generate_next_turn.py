@@ -13,9 +13,8 @@ load_dotenv()
 
 from data_loader.main_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
-from agents.therapist import TherapistAgent
 from models.eeyore import prepare_prompt_from_profile
-
+from models.patient_psi import generate_chain
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generated simulated next turn patient response"
@@ -73,7 +72,7 @@ async def main():
 
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
-
+    config["patient"]["simulator"] = args.psi
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -83,19 +82,21 @@ async def main():
     if args.N is not None:
         df = df.head(args.N)
 
-    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
 
     # Generate conversations
     for idx, row in tqdm(df.iterrows(), total=len(df)):
         try:
             profile = json.loads(row["profile"])
-            messages = row["messages"]
+            real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_system_prompt"] = system_prompt
-
+                profile["system_prompt"] = system_prompt
+            elif args.psi == "patientpsi":
+                system_prompt = generate_chain(real_messages, config)
+                profile["system_prompt"] = system_prompt
             # Run session
-            final_state = await run_session(profile, messages, config=config, start_turn=args.turn_idx)
+            final_state = await run_session(profile, real_messages, config=config, start_turn=args.turn_idx)
 
             # Save results
             save_session_results(final_state, output_dir, idx)
