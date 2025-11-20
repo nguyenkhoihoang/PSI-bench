@@ -4,3 +4,280 @@ TODO:
 https://github.com/ruiyiw/patient-psi/tree/main/python/generation 
 2. Parse that cognitive model to Patient-Psi prompt.
 """
+
+from langchain.output_parsers import PydanticOutputParser
+from langchain_litellm import ChatLiteLLM
+
+from models.generation_template import GenerationModel
+from dotenv import load_dotenv, find_dotenv
+import os
+import json
+import argparse
+import logging
+
+load_dotenv(find_dotenv())
+
+# # data_path = os.path.join(os.path.dirname(
+# #     os.path.abspath('.env')), os.getenv('DATA_PATH'))
+# out_path = os.path.join(os.path.dirname(
+#     os.path.abspath('.env')), os.getenv('OUT_PATH'))
+# --- Setup directories from .env ---
+# --- Setup directories from .env ---
+# Always anchor to the repo root (2 levels above this file)
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+data_path = os.path.join(repo_root, os.getenv("DATA_PATH", "data"))
+out_path = os.path.join(repo_root, os.getenv("OUT_PATH", "output"))
+os.makedirs(out_path, exist_ok=True)
+
+
+
+# # --- Setup directories from .env ---
+# data_path = os.getenv("DATA_PATH", "./data")
+# out_path = os.getenv("OUT_PATH", "./output")
+# os.makedirs(out_path, exist_ok=True)
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+from typing import List, Dict, Any
+import pandas as pd
+
+
+def load_conversation(messages) -> str:
+    """
+    Format one full conversation (list of {role, content}) into Therapist/Client lines.
+    Maps: assistant -> Therapist, user -> Client.
+    """
+    lines = []
+    print(f"Started - Type of messages: {type(messages)}")
+    
+    # Handle pandas Series
+    if hasattr(messages, 'tolist'):
+        # Convert Series to list
+        messages_list = messages.tolist()
+    elif hasattr(messages, 'values'):
+        # Get values from Series
+        messages_list = messages.values.tolist()
+    elif isinstance(messages, list):
+        messages_list = messages
+    else:
+        # Try to iterate directly
+        messages_list = list(messages)
+    
+    print(f"Converted to list with {len(messages_list)} items")
+    
+    for i, turn in enumerate(messages_list):
+        print(f"Processing turn {i}, type: {type(turn)}")
+        
+        # Handle different data structures for turn
+        if isinstance(turn, dict):
+            role = str(turn.get("role", "")).lower().strip()
+            content = str(turn.get("content", "")).strip().replace("\n", " ")
+        elif isinstance(turn, str):
+            # If it's a string, try to parse it as JSON
+            try:
+                import json
+                turn_dict = json.loads(turn)
+                role = str(turn_dict.get("role", "")).lower().strip()
+                content = str(turn_dict.get("content", "")).strip().replace("\n", " ")
+            except:
+                print(f"Could not parse string as JSON: {turn[:100]}")
+                continue
+        else:
+            print(f"Unexpected turn format: {type(turn)}")
+            print(f"Turn content: {turn}")
+            continue
+            
+        if role == "user":
+            lines.append(f"Therapist: {content}")
+        elif role == "assistant":
+            lines.append(f"Client: {content}")
+        else:
+            lines.append(f"{role.capitalize() or 'Unknown'}: {content}")
+    
+    print("load_conversation completed")
+    return "\n".join(lines)
+
+# def load_conversation(data, conv_number):
+#     # Inputs real conversational data - outputs the chosen conversation
+#     # Remove conv_number logic and return conversation_texts if all conversations are desired
+#     conversation_texts = []  # will store long strings
+
+#     for convo in data:
+#         lines = []
+#         for turn in convo["dialog"]:
+#             role = turn["speaker"]
+#             content = turn["content"].strip().replace("\n", " ")
+
+#             if role == "supporter":
+#                 lines.append(f"Therapist: {content}")
+#             elif role == "seeker":
+#                 lines.append(f"Client: {content}")
+#             else:
+#                 lines.append(f"{role.capitalize()}: {content}")
+
+#         # join all turns into one big string for the conversation
+#         convo_text = "\n".join(lines)
+#         conversation_texts.append(convo_text)
+#     chosen_convo = conversation_texts[conv_number]
+#     return chosen_convo
+
+
+def is_json_serializable(obj):
+    try:
+        json.dumps(obj)
+        return True
+    except (TypeError, OverflowError):
+        return False
+
+def format_patient_psi_prompt_from_ccd(
+    ccd: dict,
+    patient_type_content: str,
+    name: str = "Patient",   # pass the real name if you have it
+) -> str:
+    """
+    Build the official Patient-Ψ prompt from your CCD schema.
+    Expects keys like:
+      - life_history, core_beliefs, core_belief_description,
+        intermediate_beliefs, intermediate_beliefs_during_depression,
+        coping_strategies, cognitive_models: [ {situation, automatic_thoughts, emotion, behavior} ]
+    """
+    # map CCD → prompt fields (with safe fallbacks)
+    history = ccd.get("life_history", "")
+    core_belief = ccd.get("core_beliefs", "") or ccd.get("core_belief_description", "")
+    interm = ccd.get("intermediate_beliefs", "")
+    interm_dep = ccd.get("intermediate_beliefs_during_depression", "")
+    coping = ccd.get("coping_strategies", "")
+
+    # pull the first cognitive model item (if present)
+    cm = (ccd.get("cognitive_models") or [{}])[0]
+    situation = cm.get("situation", "")
+    auto_thoughts = cm.get("automatic_thoughts", "")
+    emotion = cm.get("emotion", "")
+    behavior = cm.get("behavior", "")
+
+    prompt = (
+        f"Imagine you are {name}, a patient who has been experiencing mental health challenges. "
+        f"You have been attending therapy sessions for several weeks. Your task is to engage in a conversation with the therapist as {name} would during a cognitive behavioral therapy (CBT) session. "
+        f"Align your responses with {name}'s background information provided in the 'Relevant history' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, "
+        f"but avoid directly referencing the diagram as a real patient would not explicitly think in those terms.\n\n"
+        f"Patient History: {history}\n\n"
+        f"Cognitive Conceptualization Diagram:\n"
+        f"Core Beliefs: {core_belief}\n"
+        f"Intermediate Beliefs: {interm}\n"
+        f"Intermediate Beliefs during Depression: {interm_dep}\n"
+        f"Coping Strategies: {coping}\n\n"
+        f"You will be asked about your experiences over the past week. Engage in a conversation with the therapist regarding the following situation and behavior. "
+        f"Use the provided emotions and automatic thoughts as a reference, but do not disclose the cognitive conceptualization diagram directly. "
+        f"Instead, allow your responses to be informed by the diagram, enabling the therapist to infer your thought processes.\n\n"
+        f"Situation: {situation}\n"
+        f"Automatic Thoughts: {auto_thoughts}\n"
+        f"Emotions: {emotion}\n"
+        f"Behavior: {behavior}\n\n"
+        f"In the upcoming conversation, you will simulate {name} during the therapy session, while the user will play the role of the therapist. Adhere to the following guidelines:\n"
+        f"1. {patient_type_content}\n"
+        f"2. Emulate the demeanor and responses of a genuine patient to ensure authenticity in your interactions. "
+        f"Use natural language, including hesitations, pauses, and emotional expressions, to enhance the realism of your responses.\n"
+        f"3. Gradually reveal deeper concerns and core issues, as a real patient often requires extensive dialogue before delving into more sensitive topics. "
+        f"This gradual revelation creates challenges for therapists in identifying the patient's true thoughts and emotions.\n"
+        f"4. Maintain consistency with {name}'s profile throughout the conversation. Ensure that your responses align with the provided background information, cognitive conceptualization diagram, and the specific situation, thoughts, emotions, and behaviors described.\n"
+        f"5. Engage in a dynamic and interactive conversation with the therapist. Respond to their questions and prompts in a way that feels authentic and true to {name}'s character. "
+        f"Allow the conversation to flow naturally, and avoid providing abrupt or disconnected responses.\n\n"
+        f"You are now {name}. Respond to the therapist's prompts as {name} would, regardless of the specific questions asked. "
+        f"Limit each of your responses to a maximum of 5 sentences. If the therapist begins the conversation with a greeting like \"Hi,\" initiate the conversation as the patient."
+    )
+    return prompt
+
+def generate_chain(data, config):
+    # with open(os.path.join(data_path, transcript_file), 'r') as f:
+    #     lines = f.readlines()
+    # --- Load JSON ---
+    # with open("/u/adeora/PSI-bench/data/real/ESConv.json", "r") as f:
+    #     data = json.load(f)
+   
+    # with open(os.path.join(data_path, "yoyoy"), "r") as f:
+    #     data = json.load(f)
+    # print("Started with open(os.path.join(data_pa")
+
+
+    lines = load_conversation(data)
+    print(lines)
+
+    query = "Based on the therapy session transcript, summarize the patient's personal history following the below instructions. Not that `Client` means the patient in the transcript.\n\n{lines}".format(
+        lines=lines)
+
+    pydantic_parser = PydanticOutputParser(
+        pydantic_object=GenerationModel.CognitiveConceptualizationDiagram)
+
+    _input = GenerationModel.prompt_template.invoke({
+        "query": query,
+        "format_instructions": pydantic_parser.get_format_instructions()
+    })
+    patient = config.get('patient')
+    max_attempts = patient.get('max_attempts')
+    llm = ChatLiteLLM(
+        model=patient.get('model'),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+        temperature=patient.get('temperature'),
+        max_retries=2,
+    )
+    attempts = 0
+
+    while attempts < max_attempts:
+        _output = pydantic_parser.parse(
+            llm.invoke(_input).content).model_dump()
+        print(_output)
+
+        if is_json_serializable(_output):
+            # Default patient name
+            patient_name = f"Patient"
+
+            # # --- Determine output filenames ---
+            # base_name = f"{patient_name}_CCD"
+            # out_json_path = os.path.join(out_path, f"{base_name}.json")
+            # out_prompt_path = os.path.join(out_path, f"{patient_name}_prompt.txt")
+
+            # # --- Save CCD JSON (structured) ---
+            # with open(out_json_path, "w") as f:
+            #     json.dump(_output, f, indent=4)
+            # logger.info(f"✅ CCD output saved to {out_json_path}")
+
+            psi_prompt = format_patient_psi_prompt_from_ccd(
+                ccd = _output,
+                patient_type_content = config.get('patient').get('conversation_type'),
+                name=patient_name
+            )
+
+            # # --- Save Patient-Psi prompt text ---
+            # with open(out_prompt_path, "w") as f:
+            #     f.write(psi_prompt)
+            # logger.info(f"✅ Patient-Ψ prompt saved to {out_prompt_path}")
+
+            return psi_prompt
+            break
+        else:
+            attempts += 1
+            logger.warning(
+                f"Output is not JSON serializable. Attempting {attempts}/{max_attempts}")
+            if attempts == max_attempts:
+                logger.error(
+                    "Max attempts reached. Could not generate a JSON serializable output.")
+                raise ValueError(
+                    "Could not generate a JSON serializable output after maximum attempts.")
+            
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--transcript-file', type=str,
+                        default="example_transcript.txt")
+    parser.add_argument('--conv-number', type=int, default=0,
+                    help="Conversation index in the dataset")
+    args = parser.parse_args()
+    generate_chain(args.transcript_file)
+
+
+if __name__ == "__main__":
+    main()

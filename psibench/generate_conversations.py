@@ -17,7 +17,11 @@ from data_loader.main_loader import load_eeyore_dataset
 from agents.patient import PatientAgent
 from agents.therapist import TherapistAgent
 from models.eeyore import prepare_prompt_from_profile
-
+from models.patient_psi import generate_chain
+# from psibench.data_loader.main_loader import load_eeyore_dataset
+# from psibench.agents.patient import PatientAgent
+# from psibench.agents.therapist import TherapistAgent
+# from psibench.models.eeyore import prepare_prompt_from_profile
 
 def parse_args():
     """Parse command line arguments."""
@@ -43,8 +47,7 @@ def parse_args():
 
 
 async def run_session(
-    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any], psi: str = "eeyore"
-) -> Dict[str, Any]:
+    profile: Dict[str, Any], real_messages: list, config: Dict[str, Any]) -> Dict[str, Any]:
     """Run a simulated counseling session matching the length of real messages.
     
     Args:
@@ -60,6 +63,7 @@ async def run_session(
     # Initialize agents
     patient = PatientAgent(patient_profile=profile, config=config)
     therapist = TherapistAgent(config=config)
+
 
     messages = []
     
@@ -106,30 +110,33 @@ async def main():
 
     with open("configs/default.yaml", "r") as f:
         config = yaml.safe_load(f)
-
+    config["patient"]["simulator"] = args.psi
     output_dir = Path(args.output_dir) / args.psi / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     df = load_eeyore_dataset(args.dataset)
-    
-    # Limit number of conversations if specified
+
     if args.N is not None:
         df = df.head(args.N)
 
-    print(f"Generating {len(df)} conversations from {args.dataset} dataset")
+    print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
 
-    # Generate conversations
+
     for idx, row in tqdm(df.iterrows(), total=len(df)):
         try:
             profile = json.loads(row["profile"])
-            messages = row["messages"]
+            real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = prepare_prompt_from_profile(profile)
-                profile["eeyore_system_prompt"] = system_prompt
+                profile["system_prompt"] = system_prompt
+
+            elif args.psi == "patientpsi":
+                # generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
+                system_prompt = generate_chain(real_messages, config)
+                profile["system_prompt"] = system_prompt
 
             # Run session
-            final_state = await run_session(profile, messages, config=config, psi=args.psi)
-
+            final_state = await run_session(profile, real_messages, config=config)
             # Save results
             save_session_results(final_state, output_dir, idx)
 
@@ -138,7 +145,6 @@ async def main():
             continue
 
     print(f"\nFinished! Session transcripts saved to {output_dir}/")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
