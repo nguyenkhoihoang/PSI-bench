@@ -25,6 +25,8 @@ def parse_args():
     parser.add_argument("--turn_idx", type=int, default=0, help="Start from which therapist turn")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
     parser.add_argument("--N", type=int, default=5, help="Number of conversations to generate")
+    parser.add_argument("--config", type=str, default="configs/default.yaml",
+                       help="Path to config file (default: configs/default.yaml)")
     args = parser.parse_args()
 
     args.dataset = args.dataset.strip().lower() if args.dataset else args.dataset
@@ -70,7 +72,7 @@ def save_session_results(
 async def main():
     args = parse_args()
 
-    with open("configs/default.yaml", "r") as f:
+    with open(args.config, "r") as f:
         config = yaml.safe_load(f)
     config["patient"]["simulator"] = args.psi
     output_dir = Path(args.output_dir) / args.psi / args.dataset

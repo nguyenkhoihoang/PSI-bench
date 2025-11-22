@@ -28,13 +28,20 @@ class TherapistAgent:
         
         # Use model from config if not explicitly provided
         if model_name is None:
-            model_name = config.get("patient").get("model")
+            model_name = config.get("therapist").get("model")
+        
+        if config.get("therapist").get("api_base"):
+            api_base = config.get("therapist").get("api_base")
+            api_key = "sk-no-key-required"
+        else:
+            api_base = os.getenv("OPENAI_BASE_URL")
+            api_key = os.getenv("OPENAI_API_KEY")
         
         self.llm = ChatLiteLLM(
             model=model_name,
-            api_key= os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            temperature=config.get("patient").get("temperature")
+            api_key=api_key,
+            api_base=api_base,
+            temperature=config.get("therapist").get("temperature")
         )
          
         self.prompt = create_therapist_prompt()
