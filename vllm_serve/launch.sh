@@ -17,7 +17,6 @@ MODEL_NAME="openai/gpt-oss-20b"
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
 export CUDA_VISIBLE_DEVICES=0
 export HF_HOME=/work/hdd/bfjp/huggingface
-export HUGGINGFACE_HUB_CACHE=/work/hdd/bfjp/hf_models/hub
 
 if [ -f "psibench/.env" ]; then
     echo "Loading environment from psibench/.env"
@@ -34,7 +33,7 @@ GPU_NUM=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 # Port for the vLLM server to listen on
-VLLM_SERVER_PORT=8000
+VLLM_SERVER_PORT=9000
 
 # Directory to store log files
 LOG_DIR="$SCRIPT_DIR/logs"
