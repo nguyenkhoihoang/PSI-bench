@@ -50,7 +50,7 @@ def load_conversation(messages) -> str:
     Maps: assistant -> Therapist, user -> Client.
     """
     lines = []
-    print(f"Started - Type of messages: {type(messages)}")
+    # print(f"Started - Type of messages: {type(messages)}")
     
     # Handle pandas Series
     if hasattr(messages, 'tolist'):
@@ -65,10 +65,10 @@ def load_conversation(messages) -> str:
         # Try to iterate directly
         messages_list = list(messages)
     
-    print(f"Converted to list with {len(messages_list)} items")
+    # print(f"Converted to list with {len(messages_list)} items")
     
     for i, turn in enumerate(messages_list):
-        print(f"Processing turn {i}, type: {type(turn)}")
+        # print(f"Processing turn {i}, type: {type(turn)}")
         
         # Handle different data structures for turn
         if isinstance(turn, dict):
@@ -96,7 +96,7 @@ def load_conversation(messages) -> str:
         else:
             lines.append(f"{role.capitalize() or 'Unknown'}: {content}")
     
-    print("load_conversation completed")
+    # print("load_conversation completed")
     return "\n".join(lines)
 
 # def load_conversation(data, conv_number):
@@ -202,7 +202,7 @@ def generate_chain(data, config):
 
 
     lines = load_conversation(data)
-    print(lines)
+    # print(lines)
 
     query = "Based on the therapy session transcript, summarize the patient's personal history following the below instructions. Not that `Client` means the patient in the transcript.\n\n{lines}".format(
         lines=lines)
@@ -216,19 +216,29 @@ def generate_chain(data, config):
     })
     patient = config.get('patient')
     max_attempts = patient.get('max_attempts')
+    if patient.get("api_base"):
+        api_base = patient.get("api_base")
+        api_key = "sk-no-key-required"
+    else:
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        api_base = os.getenv("OPENAI_BASE_URL")
+        api_key = os.getenv("OPENAI_API_KEY")
+    
+    # Initialize LLM
     llm = ChatLiteLLM(
-        model=patient.get('model'),
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL"),
-        temperature=patient.get('temperature'),
-        max_retries=2,
+        model=patient.get("model"),
+        api_key=api_key,
+        api_base=api_base,
+        temperature=patient.get("temperature"),
     )
     attempts = 0
 
     while attempts < max_attempts:
         _output = pydantic_parser.parse(
             llm.invoke(_input).content).model_dump()
-        print(_output)
+        # print(_output)
 
         if is_json_serializable(_output):
             # Default patient name

@@ -16,18 +16,19 @@ LOG_DIR="$SCRIPT_DIR/logs"
 if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
 fi
-
 # Loop through each combination of dataset and psi
 for dataset in "${datasets[@]}"; do
   for psi in "${psis[@]}"; do
     echo "Running for dataset: $dataset, psi: $psi"
-    nohup python -m psibench.generate_conversations \
+    # nohup python -m psibench.generate_conversations 
+    nohup python -m psibench.generate_next_turn \
       --dataset "$dataset" \
       --psi "$psi" \
       --batch-size 32 \
       --config "$config" \
-      --output-dir "$output_dir/$dataset/$psi" \
+      --output-dir "$output_dir" \
       > "$LOG_DIR/${dataset}_${psi}.log" 2>&1 &
+    echo "background process ID: $!"
   done
 done
 

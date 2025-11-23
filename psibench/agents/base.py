@@ -2,7 +2,9 @@
 
 from typing import Dict, Any
 from langchain_litellm import ChatLiteLLM
+import logging
 
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 class BaseAgent:
     """Base class for LLM-based agents with common functionality."""
