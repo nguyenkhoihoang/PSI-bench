@@ -5,10 +5,10 @@ patient:
   temperature: 0.7
   max_attempts: 5
   conversation_type: "verbose"
-  api_base: "http://141.142.254.223:9000/v1"
+  api_base: "http://141.142.254.224:9000/v1"
   
 # Therapist model
 therapist:
   model: "hosted_vllm/meta-llama/Llama-3.1-8B-Instruct"
   temperature: 0.5
-  api_base: "http://141.142.254.223:9000/v1"
+  api_base: "http://141.142.254.224:9000/v1"
