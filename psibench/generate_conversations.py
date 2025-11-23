@@ -29,8 +29,8 @@ def parse_args():
     )
     parser.add_argument("--output-dir", type=str, default="data/synthetic", help="Output directory")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
-    parser.add_argument("--N", type=int, default=5, 
-                       help="Number of conversations to generate (default: all available samples)")
+    parser.add_argument("--N", type=int, default=None, 
+                    help="Number of conversations to generate (default: all available samples)")
     parser.add_argument("--config", type=str, default="configs/default.yaml",
                        help="Path to config file (default: configs/default.yaml)")
     parser.add_argument("--batch-size", type=int, default=1,
@@ -120,7 +120,7 @@ async def main():
 
     df = load_eeyore_dataset(args.dataset)
 
-    if args.N is not None:
+    if args.N:
         df = df.head(args.N)
 
     print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")

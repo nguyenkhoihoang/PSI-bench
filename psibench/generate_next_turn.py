@@ -1,4 +1,3 @@
-# TODO: Real history + Next Turn
 import argparse
 import asyncio
 import json
@@ -25,7 +24,7 @@ def parse_args():
     parser.add_argument("--output-dir", type=str, default="data/synthetic", help="Output directory")
     parser.add_argument("--turn_idx", type=int, default=0, help="Start from which therapist turn")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
-    parser.add_argument("--N", type=int, default=5, help="Number of conversations to generate")
+    parser.add_argument("--N", type=int, default=None, help="Number of conversations to generate (default: all available samples)")
     parser.add_argument("--config", type=str, default="configs/default.yaml",
                        help="Path to config file (default: configs/default.yaml)")
     parser.add_argument("--batch-size", type=int, default=1,
@@ -65,7 +64,7 @@ def save_session_results(
     session_data: Dict[str, Any], output_dir: Path, session_id: int
 ):
     """Save session results to JSON file."""
-    output_path = output_dir / f"session_{session_id}_turn.json"
+    output_path = output_dir / f"turn/session_{session_id}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -90,7 +89,7 @@ async def main():
     df = load_eeyore_dataset(args.dataset)
     
     # Limit number of conversations if specified
-    if args.N is not None:
+    if args.N:
         df = df.head(args.N)
 
     print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
