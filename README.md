@@ -14,13 +14,14 @@ Create .env file inside psibench/ and put in your env variables OPENAI_API_KEY, 
 To generate synthetic data, specify dataset source `--dataset`  ('esc' (default), 'hope', 'annomi') and type of patient simulator you want `--psi` ('eeyore' (default), 'patientpsi', 'roleplaydoh')
 
 AI patient - AI therapist convo:
-
-```
-python -m psibench.generate_conversations --dataset esc
-```
 Using different model (offline vllm): Follow instruction in vllm_serve/README to serve the model, then in a separate terminal run:
 ```
 python -m psibench.generate_conversations --psi eeyore --N 1 --config configs/llama-3.1-8b-instruct.yaml
+```
+
+```
+# Run 10 conversations with 5 parallel tasks
+python -m psibench.generate_conversations --psi eeyore --N 10 --batch-size 5 --config configs/llama-3.1-8b-instruct.yaml
 ```
 
 AI patient respond given previous history (`--turn_idx` default=0)

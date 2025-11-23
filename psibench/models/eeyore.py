@@ -14,7 +14,7 @@ def validate_input(input):
     else:
         return input
 
-def prepare_prompt_from_profile(prof=None):
+async def prepare_prompt_from_profile(prof=None):
     name_tb = prof.get("name", "").lower()
     age_tb = prof.get("age", "").lower()
     gender_dd = prof.get("gender", "").lower()
@@ -37,15 +37,15 @@ def prepare_prompt_from_profile(prof=None):
     homicidal_dd = prof.get("homicidal ideation severity", "")
 
 
-    return get_system_prompt_with_profile(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb,resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd)
+    return await get_system_prompt_with_profile(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb,resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd)
 
-def get_system_prompt_with_profile(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb, resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd):
+async def get_system_prompt_with_profile(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb, resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd):
     """
     This function gets the system prompt with the profile dictionary.
     """
 
     profile_dict = {"name":"", "gender":"", "age":"", "marital_status":"", "occupation":"", "situation_of_the_client":"", "counseling_history":"", "resistance_toward_the_support":"", "symptom_severity":"", "cognition_distortion_exhibition":"", "depression_severity":"", "suicidal_ideation_severity":"", "homicidal_ideation_severity":""}
-    system_prompt = parse_system_prompt(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb, resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd)
+    system_prompt = await parse_system_prompt(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb, resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd)
     patient_profile = "## PROFILE\n" + system_prompt.split("YOUR PROFILE:")[-1].split("YOUR TASK:")[0]
 
     profile_dict["name"] = validate_input(name_tb)
@@ -66,7 +66,7 @@ def get_system_prompt_with_profile(name_tb, age_tb, gender_dd, occp_tb, marital_
 
     return system_prompt, patient_profile, profile_dict
 
-def parse_system_prompt(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb,resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd):
+async def parse_system_prompt(name_tb, age_tb, gender_dd, occp_tb, marital_dd, sit_tb, history_tb,resis_cb, mild_sym_dd, mod_sym_dd, seve_sym_dd, mild_cog_dd, mod_cog_dd, seve_cog_dd, overall_dd, suicidal_dd, homicidal_dd):
     temp_profile_dict = {"name":"", "gender":"", "age":"", "marital_status":"", "occupation":"", "situation_of_the_client":"", "counseling_history":"", "resistance_toward_the_support":"", "symptom_severity":"", "cognitive_distortion":"", "depression_severity":"", "suicidal_ideation_severity":"", "homicidal_ideation_severity":""}
     if validate_input(name_tb):
         temp_profile_dict["name"] = "- " + "name" + ": " + validate_input(name_tb) + "\n"
