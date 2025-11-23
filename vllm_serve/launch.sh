@@ -12,10 +12,10 @@
 # LLM
 # Qwen/Qwen3-30B-A3B-Instruct-2507
 
-MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
+MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1
 export HF_HOME=/work/hdd/bfjp/huggingface
 
 if [ -f "psibench/.env" ]; then
