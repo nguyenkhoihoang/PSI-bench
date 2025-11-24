@@ -89,5 +89,5 @@ We utilize a minimum threshold of **100 tokens** for flagging reliable MTLD scor
 To run the analysis, use the following command:
 
 ```bash
-python -m psibench.eval.lexical_diversity_strict --data-dir data/synthetic --psi eeyore --dataset esc --output-dir output/lexical_diversity_stict
+python -m psibench.eval.lexical_diversity_strict --data-dir /work/hdd/bfjp/data/synthetic/eeyore/hosted_vllm_meta-llama_Llama-3.3-70B-Instruct/esc --real-data-dir /work/hdd/bfjp/tahsu2/PSI-bench/data/real --psi eeyore --dataset esc
 ```
