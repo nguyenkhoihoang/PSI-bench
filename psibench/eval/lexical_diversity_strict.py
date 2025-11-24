@@ -16,6 +16,7 @@ import seaborn as sns
 from lexicalrichness import LexicalRichness
 
 from data_loader.main_loader import load_eeyore_dataset
+from data_loader.utils import merge_consecutive_messages
 
 # Common disfluencies to remove
 DISFLUENCIES = {
@@ -247,6 +248,62 @@ def analyze_session(
     return results
 
 
+def load_local_real_data(data_dir: Path, dataset: str, indices: Optional[List[int]] = None) -> pd.DataFrame:
+    """Load real conversation data from local directory."""
+    if dataset == 'esc':
+        filename = 'ESConv.json'
+    else:
+        # TODO: Add support for other datasets if needed
+        print(f"Warning: Local loading for {dataset} not explicitly implemented, trying {dataset}.json")
+        filename = f"{dataset}.json"
+        
+    file_path = data_dir / filename
+    if not file_path.exists():
+        print(f"Error: Real data file not found at {file_path}")
+        return pd.DataFrame()
+        
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            
+        # Filter by indices if provided
+        # Note: ESConv.json is a list of dicts, index corresponds to list index
+        if indices:
+            # Filter indices that are within range
+            valid_indices = [i for i in indices if 0 <= i < len(data)]
+            data = [data[i] for i in valid_indices]
+            
+        # Convert to DataFrame format expected by analysis
+        rows = []
+        for i, session in enumerate(data):
+            # Map 'seeker'/'supporter' to 'user'/'assistant' if needed, 
+            # or just ensure 'role' exists. 
+            # ESConv uses 'speaker': 'seeker'/'supporter'
+            messages = []
+            for msg in session.get('dialog', []):
+                role = 'assistant' if msg['speaker'] == 'supporter' else 'user'
+                messages.append({
+                    'role': role,
+                    'content': msg['content']
+                })
+            
+            # Merge consecutive messages
+            merged_messages = merge_consecutive_messages(messages)
+            
+            rows.append({
+                'messages': merged_messages,
+                # Preserve original index if we filtered, otherwise use loop index
+                'original_index': indices[i] if indices else i 
+            })
+            
+        return pd.DataFrame(rows)
+        
+    except Exception as e:
+        print(f"Error loading local real data: {e}")
+        return pd.DataFrame()
+
+
+
 def create_visualizations(df: pd.DataFrame, output_dir: Path):
     """Generate plots for the analysis results."""
     sns.set_theme(style="whitegrid")
@@ -398,6 +455,7 @@ def main():
     parser = argparse.ArgumentParser(description='Strict Lexical Diversity Analysis')
     parser.add_argument("--dataset", type=str, default="esc", help="Dataset type (default: esc)")
     parser.add_argument("--data-dir", type=str, required=True, help="Synthetic data directory")
+    parser.add_argument("--real-data-dir", type=str, help="Real data directory (optional, overrides HF)")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
     parser.add_argument("--output-dir", type=str, default="output/lexical_diversity_strict", help="Output directory")
     parser.add_argument("-k", "--num-samples", type=int, help="Number of samples to analyze")
@@ -441,7 +499,16 @@ def main():
     for idx in sorted_indices:
         # Load Real Data
         try:
-            real_df = load_eeyore_dataset(args.dataset, indices=[idx])
+            if args.real_data_dir:
+                real_path = Path(args.real_data_dir)
+                # We pass [idx] but for local file we need to handle it carefully.
+                # The load_local_real_data implementation above handles a list of indices.
+                # However, indices in ESConv.json are implicit (list position).
+                # If the synthetic data uses the same indices as the full ESConv dataset, this works.
+                real_df = load_local_real_data(real_path, args.dataset, indices=[idx])
+            else:
+                real_df = load_eeyore_dataset(args.dataset, indices=[idx])
+                
             if real_df.empty:
                 continue
             real_msgs = get_assistant_messages(real_df.iloc[0]['messages'])
@@ -464,7 +531,13 @@ def main():
             
         # Load Synthetic Turn Data (Optional)
         synth_turn_msgs = None
-        turn_file = data_path / f"session_{idx}_turn.json"
+        # Turn data is in a 'turn' subdirectory with the same filename 'session_{idx}.json'
+        turn_file = data_path / "turn" / f"session_{idx}.json"
+        
+        # Fallback to old naming if not found (just in case)
+        if not turn_file.exists():
+             turn_file = data_path / f"session_{idx}_turn.json"
+             
         if turn_file.exists():
             try:
                 with open(turn_file, 'r') as f:
