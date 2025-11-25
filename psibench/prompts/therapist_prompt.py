@@ -32,7 +32,7 @@ def create_therapist_prompt() -> ChatPromptTemplate:
 
     User's latest message: {patient_message}
 
-    Provide your therapeutic response:"""
+    Provide only your therapeutic response, nothing else:"""
 
     return ChatPromptTemplate.from_messages([
         ("system", system_message),

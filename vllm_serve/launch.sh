@@ -2,7 +2,7 @@
 
 # Model name from Hugging Face
 # Instruct LLM
-# meta-llama/Llama-3.1-8B
+# meta-llama/Llama-3.1-8B-Instruct
 
 # Reasoning LLM
 # openai/gpt-oss-120b
@@ -12,10 +12,10 @@
 # LLM
 # Qwen/Qwen3-30B-A3B-Instruct-2507
 
-MODEL_NAME="openai/gpt-oss-20b"
+MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1
 export HF_HOME=/work/hdd/bfjp/huggingface
 
 if [ -f "psibench/.env" ]; then
@@ -25,7 +25,7 @@ fi
 
 # Verify environment variables
 echo "HF_TOKEN is set: ${HF_TOKEN:+yes}"
-echo "HUGGINGFACE_HUB_CACHE: $HUGGINGFACE_HUB_CACHE"
+echo "HF HOME: $HF_HOME"
 # Automatically count the number of GPUs based on CUDA_VISIBLE_DEVICES
 GPU_NUM=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 

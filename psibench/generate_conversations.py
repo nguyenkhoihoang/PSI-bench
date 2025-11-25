@@ -9,19 +9,15 @@ from typing import Any, Dict
 import yaml
 from dotenv import load_dotenv
 from tqdm import tqdm
-
+import time
 load_dotenv()
 
 
-from data_loader.main_loader import load_eeyore_dataset
-from agents.patient import PatientAgent
-from agents.therapist import TherapistAgent
-from models.eeyore import prepare_prompt_from_profile
-from models.patient_psi import generate_chain
-# from psibench.data_loader.main_loader import load_eeyore_dataset
-# from psibench.agents.patient import PatientAgent
-# from psibench.agents.therapist import TherapistAgent
-# from psibench.models.eeyore import prepare_prompt_from_profile
+from psibench.data_loader.main_loader import load_eeyore_dataset
+from psibench.agents.patient import PatientAgent
+from psibench.agents.therapist import TherapistAgent
+from psibench.models.eeyore import prepare_prompt_from_profile
+from psibench.models.patient_psi import generate_chain
 
 def parse_args():
     """Parse command line arguments."""
@@ -33,9 +29,12 @@ def parse_args():
     )
     parser.add_argument("--output-dir", type=str, default="data/synthetic", help="Output directory")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
-    parser.add_argument("--N", type=int, default=5, 
-                       help="Number of conversations to generate (default: all available samples)")
-    
+    parser.add_argument("--N", type=int, default=None, 
+                    help="Number of conversations to generate (default: all available samples)")
+    parser.add_argument("--config", type=str, default="configs/default.yaml",
+                       help="Path to config file (default: configs/default.yaml)")
+    parser.add_argument("--batch-size", type=int, default=1,
+                       help="Number of parallel tasks to run (default: 1)")
     args = parser.parse_args()
     
     # Clean string input arguments
@@ -108,26 +107,33 @@ def save_session_results(
 async def main():
     args = parse_args()
 
-    with open("configs/default.yaml", "r") as f:
+    with open(args.config, "r") as f:
         config = yaml.safe_load(f)
     config["patient"]["simulator"] = args.psi
-    output_dir = Path(args.output_dir) / args.psi / args.dataset
+     # Extract model name for output directory
+    model_name = config.get("patient").get("model")
+    # Clean model name for use in path (remove special characters)
+    clean_model_name = model_name.replace("/", "_").replace(":", "_")
+    
+    output_dir = Path(args.output_dir) / args.psi / clean_model_name / args.dataset
     output_dir.mkdir(parents=True, exist_ok=True)
 
     df = load_eeyore_dataset(args.dataset)
 
-    if args.N is not None:
+    if args.N:
         df = df.head(args.N)
 
     print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
+    print(f"Batch size: {args.batch_size} parallel tasks")
 
-
-    for idx, row in tqdm(df.iterrows(), total=len(df)):
+    all_tasks = []
+    # Prepare all profiles and tasks first
+    for idx, row in df.iterrows():
         try:
             profile = json.loads(row["profile"])
             real_messages = row["messages"]
             if args.psi == "eeyore":
-                system_prompt, _, _ = prepare_prompt_from_profile(profile)
+                system_prompt, _, _ = await prepare_prompt_from_profile(profile)
                 profile["system_prompt"] = system_prompt
 
             elif args.psi == "patientpsi":
@@ -135,16 +141,37 @@ async def main():
                 system_prompt = generate_chain(real_messages, config)
                 profile["system_prompt"] = system_prompt
 
-            # Run session
-            final_state = await run_session(profile, real_messages, config=config)
-            # Save results
-            save_session_results(final_state, output_dir, idx)
+            all_tasks.append((idx, profile, real_messages))
 
         except Exception as e:
-            print(f"Error in session {idx}: {e}")
+            print(f"Error preparing session {idx}: {e}")
             continue
+    
+    # Process tasks in batches
+    for batch_start in range(0, len(all_tasks), args.batch_size):
+        batch_end = min(batch_start + args.batch_size, len(all_tasks))
+        batch = all_tasks[batch_start:batch_end]
+        
+        # Create and execute batch tasks
+        batch_coroutines = [
+            run_session(profile, real_messages, config=config)
+            for idx, profile, real_messages in batch
+        ]
+        
+        results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
+        
+        # Save results for this batch
+        for (idx, _, _), result in zip(batch, results):
+            if isinstance(result, Exception):
+                print(f"\nError in session {idx}: {result}")
+            else:
+                save_session_results(result, output_dir, idx)
 
     print(f"\nFinished! Session transcripts saved to {output_dir}/")
 
 if __name__ == "__main__":
+    start_time = time.time()
     asyncio.run(main())
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total time taken: {elapsed_time:.2f} seconds")
