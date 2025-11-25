@@ -1,28 +1,13 @@
 """Patient agent implementation with structured output."""
 
-import os
 from typing import Any, Dict
 
-import openai
-from dotenv import load_dotenv
-from langchain_litellm import ChatLiteLLM
-from prompts.patient_prompt import create_patient_prompt
-from pydantic import BaseModel, Field
-
+from psibench.prompts.patient_prompt import create_patient_prompt
+from psibench.agents.base import BaseAgent
 from psibench.models.roleplay_doh import roleplay_doh_rewrite_response
 
-load_dotenv()
 
-
-class PatientResponse(BaseModel):
-    """Structured output schema for patient responses."""
-
-    response: str = Field(
-        description="The patient's response to the therapist/supporter"
-    )
-
-
-class PatientAgent:
+class PatientAgent(BaseAgent):
     """LLM-based patient agent that responds based on their profile and conversation history."""
 
     def __init__(
@@ -39,26 +24,13 @@ class PatientAgent:
             config: Configuration dictionary for the simulation
             model_name: Optional model override, if not specified uses config
         """
-        self.patient_profile = patient_profile
-        self.config = config
-
-        # Use model from config if not explicitly provided
-        if model_name is None:
-            model_name = config.get("patient").get("model")
-
-        self.llm = ChatLiteLLM(
-            model=model_name,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            temperature=config.get("patient").get("temperature"),
-        )
-
-        self.psi = config.get("patient").get("simulator")
-
-        self.prompt = create_patient_prompt(psi=self.psi)
-
+        # Initialize base agent
+        super().__init__(config, "patient", model_name)
         
-        self.chain = self.prompt | self.llm.with_structured_output(PatientResponse)
+        self.patient_profile = patient_profile
+        self.psi = config.get("patient").get("simulator")
+        self.prompt = create_patient_prompt(psi=self.psi)
+        self.chain = self.prompt | self.llm
 
 
     async def respond(
@@ -83,8 +55,8 @@ class PatientAgent:
                 "therapist_message": therapist_message,
             }
             # print(self.prompt.format(**inputs)) # Commented out print statement
-            response: PatientResponse = await self.chain.ainvoke(inputs)
-            return response.response
+            response = await self.chain.ainvoke(inputs)
+            return response.content.strip()
         
         elif self.psi == "roleplaydoh":
 
@@ -93,7 +65,8 @@ class PatientAgent:
                 "conversation_history": self._format_history(conversation_history),
                 "therapist_message": therapist_message,
             }
-            initial_response: PatientResponse = await self.chain.ainvoke(inputs)
+            initial_response = await self.chain.ainvoke(inputs)
+            parsed_response = initial_response.content.strip()
 
             # Prepare prompts for roleplay_doh_pipeline
             # The pipeline expects a list of dicts with "role" and "content"
@@ -105,7 +78,7 @@ class PatientAgent:
             refined_response = await roleplay_doh_rewrite_response(
                 self.llm,  # client
                 prompts_for_pipeline,  # initial_prompts
-                initial_response.response,  # response_content
+                parsed_response,  # response_content
                 self.patient_profile,  # profile
             )
 
@@ -118,18 +91,8 @@ class PatientAgent:
                 "conversation_history": self._format_history(conversation_history),
                 "therapist_message": therapist_message,
             }
-            response: PatientResponse = await self.chain.ainvoke(inputs)
-            return response.response
+            response = await self.chain.ainvoke(inputs)
+            return response.content.strip()
             
         else:
             pass
-
-    def _format_history(self, history: list[Dict[str, str]]) -> str:
-        """Format conversation history for the prompt."""
-        formatted = []
-        for msg in history:
-            role = msg["role"].capitalize()
-            content = msg["content"]
-            formatted.append(f"{role}: {content}")
-
-        return "\n".join(formatted)

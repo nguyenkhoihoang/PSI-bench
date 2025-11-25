@@ -21,7 +21,7 @@ def create_eeyore_prompt() -> ChatPromptTemplate:
 
     User's latest message: {therapist_message}
 
-    Respond as the patient:"""
+    Respond as the patient. Provide only your response, nothing else:"""
 
     return ChatPromptTemplate.from_messages(
         [
@@ -38,6 +38,7 @@ def create_patient_psi_prompt() -> ChatPromptTemplate:
 
     Therapist's latest message: {therapist_message}
 
+    Provide only your response as the patient, nothing else.
     """
     return ChatPromptTemplate.from_messages([("system", system_message)])
 
@@ -51,7 +52,7 @@ def create_roleplay_doh_prompt() -> ChatPromptTemplate:
 
     Therapist's latest message: {therapist_message}
 
-    Respond as the patient:"""
+    Respond as the patient. Provide only your response, nothing else:"""
 
     return ChatPromptTemplate.from_messages(
         [

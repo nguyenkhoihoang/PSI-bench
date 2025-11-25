@@ -14,9 +14,14 @@ Create .env file inside psibench/ and put in your env variables OPENAI_API_KEY, 
 To generate synthetic data, specify dataset source `--dataset`  ('esc' (default), 'hope', 'annomi') and type of patient simulator you want `--psi` ('eeyore' (default), 'patientpsi', 'roleplaydoh')
 
 AI patient - AI therapist convo:
+Using different model (offline vllm): Follow instruction in vllm_serve/README to serve the model, then in a separate terminal run:
+```
+python -m psibench.generate_conversations --psi eeyore --N 1 --config configs/llama-3.1-8b-instruct.yaml
+```
 
 ```
-python -m psibench.generate_conversations --dataset esc
+# Run 10 conversations with 5 parallel tasks
+python -m psibench.generate_conversations --psi eeyore --N 10 --batch-size 5 --config configs/llama-3.1-8b-instruct.yaml
 ```
 
 AI patient respond given previous history (`--turn_idx` default=0)
@@ -28,7 +33,7 @@ python -m psibench.generate_next_turn --dataset --turn_idx 3
 Note: If have error like `ModuleNotFoundError: No module named 'data_loader'`
 export PYTHONPATH to your repo/psi-bench, e.g.
 ```
-export PYTHONPATH=/u/nhoang1/PSI-bench/psibench/
+export PYTHONPATH=/work/hdd/bfjp/nhoang1/PSI-bench/psibench/
 ```
 The synthetic data will be saved in data/synthetic/{psi}/{dataset}
 

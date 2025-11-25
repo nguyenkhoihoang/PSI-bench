@@ -6,16 +6,13 @@ messages = [
 ]
 
 response = litellm.completion(
-            model="hosted_vllm/openai/gpt-oss-20b", # pass the vllm model name
+            model="hosted_vllm/meta-llama/Llama-3.1-8B-Instruct", # pass the vllm model name
             messages=messages,
             api_base="http://141.142.254.222:9000/v1",
-            reasoning_effort="medium", # can be "low", "medium", "high"
             temperature=0.9,
             max_tokens=2000)
 
 content = response.choices[0].message.content
-reasoning = response.choices[0].message.reasoning_content
-print("\nREASONING:")
-print(reasoning)
+
 print("RESPONSE:")
 print(content)
