@@ -12,9 +12,9 @@ from rouge_score import rouge_scorer
 from bert_score import score
 import torch
 
-from data_loader.esc import load_esc_original_data
-from data_loader.main_loader import load_synthetic_data_to_df, load_eeyore_dataset
-from data_loader.utils import get_synthetic_indices
+from psibench.data_loader.esc import load_esc_original_data
+from psibench.data_loader.main_loader import load_synthetic_data_to_df, load_eeyore_dataset
+from psibench.data_loader.utils import get_synthetic_indices
 #TODO: If use this similarity in final benchmark, make it generalize to other datasets besides ESC
 ## Situation vs Conversation: Real Convo
 def concat_client_messages(messages_list):

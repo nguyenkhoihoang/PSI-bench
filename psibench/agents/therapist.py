@@ -1,7 +1,7 @@
 """Therapist agent implementation with structured output."""
 
 from typing import Dict, Any
-from prompts.therapist_prompt import create_therapist_prompt
+from psibench.prompts.therapist_prompt import create_therapist_prompt
 from psibench.agents.base import BaseAgent
 
 

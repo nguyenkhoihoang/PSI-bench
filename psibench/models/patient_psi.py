@@ -8,7 +8,7 @@ https://github.com/ruiyiw/patient-psi/tree/main/python/generation
 from langchain.output_parsers import PydanticOutputParser
 from langchain_litellm import ChatLiteLLM
 
-from models.generation_template import GenerationModel
+from psibench.models.generation_template import GenerationModel
 from dotenv import load_dotenv, find_dotenv
 import os
 import json
