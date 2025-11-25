@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from prompts.patient_prompt import create_patient_prompt
+from psibench.prompts.patient_prompt import create_patient_prompt
 from psibench.agents.base import BaseAgent
 from psibench.models.roleplay_doh import roleplay_doh_rewrite_response
 

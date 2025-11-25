@@ -13,11 +13,11 @@ import time
 load_dotenv()
 
 
-from data_loader.main_loader import load_eeyore_dataset
-from agents.patient import PatientAgent
-from agents.therapist import TherapistAgent
-from models.eeyore import prepare_prompt_from_profile
-from models.patient_psi import generate_chain
+from psibench.data_loader.main_loader import load_eeyore_dataset
+from psibench.agents.patient import PatientAgent
+from psibench.agents.therapist import TherapistAgent
+from psibench.models.eeyore import prepare_prompt_from_profile
+from psibench.models.patient_psi import generate_chain
 
 def parse_args():
     """Parse command line arguments."""
