@@ -12,3 +12,8 @@ patient:
 therapist:
   model: "gpt-4.1-mini"
   temperature: 0.5
+
+eval:
+  ptc_classifier:
+    model: "gpt-4.1-mini"
+    temperature: 0.3
