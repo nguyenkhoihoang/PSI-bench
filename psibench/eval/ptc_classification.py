@@ -281,12 +281,12 @@ def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, out
         synthetic_df: DataFrame with synthetic conversation analysis
         output_dir: Directory to save comparison results
     """
-    # Calculate aggregate statistics
+    # Calculate aggregate statistics (P, T, C averaged over non-filler turns only)
     real_stats = {
-        'P_mean': real_df['P_ratio'].mean(),
+        'P_mean': real_df['P_ratio'].mean(),  # Already calculated over non-filler turns
         'T_mean': real_df['T_ratio'].mean(),
         'C_mean': real_df['C_ratio'].mean(),
-        'F_mean': real_df['F_ratio'].mean(),
+        'F_mean': real_df['F_ratio'].mean(),  # Calculated over all turns
         'P_std': real_df['P_ratio'].std(),
         'T_std': real_df['T_ratio'].std(),
         'C_std': real_df['C_ratio'].std(),
@@ -296,10 +296,10 @@ def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, out
     }
     
     synthetic_stats = {
-        'P_mean': synthetic_df['P_ratio'].mean(),
+        'P_mean': synthetic_df['P_ratio'].mean(),  # Already calculated over non-filler turns
         'T_mean': synthetic_df['T_ratio'].mean(),
         'C_mean': synthetic_df['C_ratio'].mean(),
-        'F_mean': synthetic_df['F_ratio'].mean(),
+        'F_mean': synthetic_df['F_ratio'].mean(),  # Calculated over all turns
         'P_std': synthetic_df['P_ratio'].std(),
         'T_std': synthetic_df['T_ratio'].std(),
         'C_std': synthetic_df['C_ratio'].std(),
@@ -308,34 +308,34 @@ def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, out
         'non_filler_turns': synthetic_df['non_filler_turns'].sum()
     }
     
-    # Create comparison DataFrame
+    # Create comparison DataFrame (P, T, C are proportions of non-filler turns)
     comparison = pd.DataFrame({
-        'Real_Mean': [real_stats['P_mean'], real_stats['T_mean'], real_stats['C_mean'], real_stats['F_mean']],
-        'Real_Std': [real_stats['P_std'], real_stats['T_std'], real_stats['C_std'], real_stats['F_std']],
-        'Synthetic_Mean': [synthetic_stats['P_mean'], synthetic_stats['T_mean'], synthetic_stats['C_mean'], synthetic_stats['F_mean']],
-        'Synthetic_Std': [synthetic_stats['P_std'], synthetic_stats['T_std'], synthetic_stats['C_std'], synthetic_stats['F_std']],
+        'Real_Mean': [real_stats['P_mean'], real_stats['T_mean'], real_stats['C_mean']],
+        'Real_Std': [real_stats['P_std'], real_stats['T_std'], real_stats['C_std']],
+        'Synthetic_Mean': [synthetic_stats['P_mean'], synthetic_stats['T_mean'], synthetic_stats['C_mean']],
+        'Synthetic_Std': [synthetic_stats['P_std'], synthetic_stats['T_std'], synthetic_stats['C_std']],
         'Difference': [
             synthetic_stats['P_mean'] - real_stats['P_mean'],
             synthetic_stats['T_mean'] - real_stats['T_mean'],
-            synthetic_stats['C_mean'] - real_stats['C_mean'],
-            synthetic_stats['F_mean'] - real_stats['F_mean']
+            synthetic_stats['C_mean'] - real_stats['C_mean']
         ]
-    }, index=['Problem (P)', 'Transition (T)', 'Change (C)', 'Filler (F)'])
-    
-    # Save comparison
-    output_dir.mkdir(parents=True, exist_ok=True)
-    comparison.to_csv(output_dir / 'ptc_comparison.csv')
+    }, index=['Problem (P)', 'Transition (T)', 'Change (C)'])
     
     with open(output_dir / 'ptc_comparison.txt', 'w') as f:
-        f.write("PTC+F Distribution Comparison: Real vs Synthetic\n")
+        f.write("PTC Distribution Comparison: Real vs Synthetic\n")
+        f.write("=" * 70 + "\n\n")
+        f.write("Note: P, T, C ratios are calculated over non-filler turns only\n")
         f.write("=" * 70 + "\n\n")
         f.write(comparison.to_string())
-        f.write(f"\n\nTotal Real Turns: {real_stats['total_turns']}")
+        f.write(f"\n\n--- Turn Statistics ---")
+        f.write(f"\nTotal Real Turns: {real_stats['total_turns']}")
         f.write(f"\nNon-Filler Real Turns: {real_stats['non_filler_turns']}")
-        f.write(f"\nTotal Synthetic Turns: {synthetic_stats['total_turns']}")
-        f.write(f"\nNon-Filler Synthetic Turns: {synthetic_stats['non_filler_turns']}\n")
+        f.write(f"\nReal Filler Ratio: {real_stats['F_mean']:.3f}")
+        f.write(f"\n\nTotal Synthetic Turns: {synthetic_stats['total_turns']}")
+        f.write(f"\nNon-Filler Synthetic Turns: {synthetic_stats['non_filler_turns']}")
+        f.write(f"\nSynthetic Filler Ratio: {synthetic_stats['F_mean']:.3f}\n")
     
-    print("\nPTC+F Distribution Comparison:")
+    print("\nPTC Distribution Comparison:")
     print(comparison)
     
     return comparison
@@ -375,13 +375,21 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Calculate average ratios including Filler
-    real_means = [real_df['P_ratio'].mean(), real_df['T_ratio'].mean(), real_df['C_ratio'].mean()]
-    synthetic_means = [synthetic_df['P_ratio'].mean(), synthetic_df['T_ratio'].mean(), synthetic_df['C_ratio'].mean()]
+    # Calculate average counts as ratios of total turns (including fillers)
+    real_p_ratio = real_df['P_count'].sum() / real_df['total_patient_turns'].sum()
+    real_t_ratio = real_df['T_count'].sum() / real_df['total_patient_turns'].sum()
+    real_c_ratio = real_df['C_count'].sum() / real_df['total_patient_turns'].sum()
+    real_f_ratio = real_df['F_count'].sum() / real_df['total_patient_turns'].sum()
     
-    # Calculate filler ratios (F_ratio is already calculated as F_count / total_turns)
-    real_filler_mean = real_df['F_ratio'].mean()
-    synthetic_filler_mean = synthetic_df['F_ratio'].mean()
+    synthetic_p_ratio = synthetic_df['P_count'].sum() / synthetic_df['total_patient_turns'].sum()
+    synthetic_t_ratio = synthetic_df['T_count'].sum() / synthetic_df['total_patient_turns'].sum()
+    synthetic_c_ratio = synthetic_df['C_count'].sum() / synthetic_df['total_patient_turns'].sum()
+    synthetic_f_ratio = synthetic_df['F_count'].sum() / synthetic_df['total_patient_turns'].sum()
+    
+    real_means = [real_p_ratio, real_t_ratio, real_c_ratio]
+    synthetic_means = [synthetic_p_ratio, synthetic_t_ratio, synthetic_c_ratio]
+    real_filler_mean = real_f_ratio
+    synthetic_filler_mean = synthetic_f_ratio
     
     # 1. Stacked bar chart of average P, T, C, F ratios
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
@@ -397,7 +405,7 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
         # Add value label
         if value > 0.02:  # Only show label if segment is large enough
             axes[0].text(0, bottom + value/2, f'{value:.2f}', 
-                        ha='center', va='center', fontsize=12, fontweight='bold')
+                    ha='center', va='center', fontsize=12, fontweight='bold')
         bottom += value
     
     axes[0].set_xlim([-0.5, 0.5])
@@ -427,32 +435,34 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     axes[1].legend(loc='upper right')
     axes[1].grid(axis='y', alpha=0.3)
     
-    plt.suptitle('Average PTC+F Distribution', fontsize=16, fontweight='bold', y=0.98)
+    plt.suptitle('Average PTCF Distribution', fontsize=16, fontweight='bold', y=0.98)
     plt.tight_layout()
     plt.savefig(output_dir / 'ptc_stacked_average.png', dpi=300, bbox_inches='tight')
     plt.close()
     
     # 2. Step line plot showing PTC progression through conversation turns
+    # Filter to conversations with at least 10 patient messages
+    real_df_filtered = real_df[real_df['total_patient_turns'] >= 10].copy()
+    synthetic_df_filtered = synthetic_df[synthetic_df['total_patient_turns'] >= 10].copy()
+    
+    print(f"\nFiltered to {len(real_df_filtered)} real and {len(synthetic_df_filtered)} synthetic conversations with ≥10 turns")
+    
     # Get turn-by-turn data
-    real_turns = get_turn_classifications(real_df)
-    synthetic_turns = get_turn_classifications(synthetic_df)
+    real_turns = get_turn_classifications(real_df_filtered)
+    synthetic_turns = get_turn_classifications(synthetic_df_filtered)
+    
+    # Filter to first 10 turns only
+    real_turns = real_turns[real_turns['turn_index'] < 10].copy()
+    synthetic_turns = synthetic_turns[synthetic_turns['turn_index'] < 10].copy()
     
     # Map classifications to numeric values: P=1, T=2, C=3, F=NaN
     ptc_map = {'P': 1, 'T': 2, 'C': 3, 'F': np.nan}
     real_turns['ptc_numeric'] = real_turns['classification'].map(ptc_map)
     synthetic_turns['ptc_numeric'] = synthetic_turns['classification'].map(ptc_map)
     
-    # Identify filler positions
-    real_fillers = real_turns[real_turns['classification'] == 'F'][['turn_index']].copy()
-    synthetic_fillers = synthetic_turns[synthetic_turns['classification'] == 'F'][['turn_index']].copy()
-    
     # Average PTC value per turn index across all conversations (F will be NaN and excluded)
     real_avg = real_turns.groupby('turn_index')['ptc_numeric'].mean().reset_index()
     synthetic_avg = synthetic_turns.groupby('turn_index')['ptc_numeric'].mean().reset_index()
-    
-    # Count filler occurrences per turn index for both datasets
-    real_filler_counts = real_fillers.groupby('turn_index').size().reset_index(name='filler_count')
-    synthetic_filler_counts = synthetic_fillers.groupby('turn_index').size().reset_index(name='filler_count')
     
     fig, ax = plt.subplots(figsize=(14, 6))
     
@@ -464,11 +474,12 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     
     ax.set_xlabel('Turn Index', fontsize=12)
     ax.set_ylabel('PTC Classification', fontsize=12)
-    ax.set_title('Average PTC Progression Through Conversation (Fillers Excluded from Mean)', 
+    ax.set_title('Average PTC Progression (First 10 Turns, Conversations with ≥10 Turns)', 
                 fontsize=14, fontweight='bold')
     ax.set_yticks([1, 2, 3])
     ax.set_yticklabels(['Problem (P)', 'Transition (T)', 'Change (C)'])
     ax.set_ylim([0.5, 3.5])
+    ax.set_xlim([-0.5, 9.5])
     
     # Force x-axis to show only integer values
     from matplotlib.ticker import MaxNLocator
@@ -482,8 +493,8 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     plt.close()
     
     print(f"\nVisualization plots saved to {output_dir}/")
-    print("  - ptc_stacked_average.png: Stacked bar chart of average P/T/C/F ratios")
-    print("  - ptc_progression_stepline.png: Step line plot showing PTC progression (fillers excluded)")
+    print("  - ptc_stacked_average.png: Stacked bar chart of average P/T/C/F ratios (all conversations)")
+    print("  - ptc_progression_stepline.png: Step line plot showing PTC progression (first 10 turns, conversations ≥10 turns)")
 
 
 def main():
@@ -528,11 +539,9 @@ def main():
         print(f"Found {len(indices)} synthetic conversations")
         print(f"Analyzing corresponding real conversations from {args.dataset} dataset...")
         real_df = analyze_real_dataset(args.dataset, indices, judge, output_dir / 'real')
-        real_df.to_csv(output_dir / 'real_ptc_summary.csv', index=False)
         
         print("\nAnalyzing synthetic conversations...")
         synthetic_df = analyze_dataset(synthetic_dir, judge, output_dir / 'synthetic')
-        synthetic_df.to_csv(output_dir / 'synthetic_ptc_summary.csv', index=False)
         
         print("\nComparing distributions...")
         compare_distributions(real_df, synthetic_df, output_dir)
@@ -543,9 +552,7 @@ def main():
     elif args.synthetic_dir:
         # Analyze synthetic only
         print("Analyzing synthetic conversations...")
-        df = analyze_dataset(Path(args.synthetic_dir), judge, output_dir)
-        df.to_csv(output_dir / 'ptc_summary.csv', index=False)
-    
+        df = analyze_dataset(Path(args.synthetic_dir), judge, output_dir)    
     else:
         print("Error: Please provide --real-dir and/or --synthetic-dir")
         return
