@@ -379,13 +379,14 @@ def analyze_dataset(data_dir: Path, judge: PTCClassifier, output_dir: Path, batc
     return pd.DataFrame(results)
 
 
-def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, output_dir: Path):
+def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, output_dir: Path, judge: PTCClassifier = None):
     """Compare PTC distributions between real and synthetic data.
     
     Args:
         real_df: DataFrame with real conversation analysis
         synthetic_df: DataFrame with synthetic conversation analysis
         output_dir: Directory to save comparison results
+        judge: PTCClassifier instance for model settings
     """
     # Calculate aggregate statistics (P, T, C averaged over non-filler turns only)
     real_stats = {
@@ -430,6 +431,14 @@ def compare_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, out
     with open(output_dir / 'ptc_comparison.txt', 'w') as f:
         f.write("PTC Distribution Comparison: Real vs Synthetic\n")
         f.write("=" * 70 + "\n\n")
+        
+        # Write model settings if judge is provided
+        if judge:
+            f.write("--- Model Settings ---\n")
+            f.write(f"Model: {judge.model_name}\n")
+            f.write(f"Temperature: {judge.temperature}\n")
+            f.write("\n")
+        
         f.write("Note: P, T, C ratios are calculated over non-filler turns only\n")
         f.write("=" * 70 + "\n\n")
         f.write(comparison.to_string())
@@ -667,7 +676,7 @@ def main():
         synthetic_df = analyze_dataset(synthetic_dir, judge, output_dir / 'synthetic', batch_size=args.batch_size)
         
         print("\nComparing distributions...")
-        compare_distributions(real_df, synthetic_df, output_dir)
+        compare_distributions(real_df, synthetic_df, output_dir, judge)
         
         print("\nGenerating visualizations...")
         visualize_distributions(real_df, synthetic_df, output_dir, turn_threshold=args.turn_threshold)
