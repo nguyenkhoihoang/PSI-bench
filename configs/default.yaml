@@ -16,4 +16,7 @@ therapist:
 eval:
   ptc_classifier:
     model: "gpt-4.1-mini"
-    temperature: 0.3
+    temperature: 0.5
+    # model: "hosted_vllm/Qwen/Qwen3-30B-A3B-Thinking-2507"
+    # temperature: 0.5
+    # api_base: "http://141.142.254.224:9000/v1"
