@@ -499,17 +499,11 @@ def main():
     for idx in sorted_indices:
         # Load Real Data
         try:
-            if args.real_data_dir:
-                real_path = Path(args.real_data_dir)
-                # We pass [idx] but for local file we need to handle it carefully.
-                # The load_local_real_data implementation above handles a list of indices.
-                # However, indices in ESConv.json are implicit (list position).
-                # If the synthetic data uses the same indices as the full ESConv dataset, this works.
-                real_df = load_local_real_data(real_path, args.dataset, indices=[idx])
-            else:
-                real_df = load_eeyore_dataset(args.dataset, indices=[idx])
+            
+            real_df = load_eeyore_dataset(args.dataset, indices=[idx])
                 
             if real_df.empty:
+                print(f"Error loading real data for {idx}: Empty DataFrame")
                 continue
             real_msgs = get_assistant_messages(real_df.iloc[0]['messages'])
         except Exception as e:
