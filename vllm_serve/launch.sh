@@ -12,7 +12,7 @@
 # LLM
 # Qwen/Qwen3-30B-A3B-Instruct-2507
 
-MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
+MODEL_NAME="openai/gpt-oss-120b"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
 export CUDA_VISIBLE_DEVICES=0,1
@@ -61,6 +61,6 @@ vllm serve $MODEL_NAME \
     --max-num-seqs 50 \
     --async-scheduling \
     --port $VLLM_SERVER_PORT \
-    --max-model-len 10000 \
+    --max-model-len 20000 \
     --gpu-memory-utilization 0.95 \
     >> $LOG_PATH 2>&1

@@ -1,16 +1,16 @@
-# Configuration for therapy session simulation
-
 # Patient model
 patient:
   simulator: "eeyore"
-  model: "gpt-4.1-mini"
+  model: "hosted_vllm/openai/gpt-oss-120b"
   temperature: 0.7
   max_tokens: 1000
   max_attempts: 5
   conversation_type: "verbose"
+  api_base: "http://141.142.254.223:9000/v1"
   
 # Therapist model
 therapist:
-  model: "gpt-4.1-mini"
+  model: "hosted_vllm/openai/gpt-oss-120b"
   temperature: 0.5
   max_tokens: 1000
+  api_base: "http://141.142.254.223:9000/v1"
