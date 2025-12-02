@@ -61,5 +61,5 @@ pip install https://github.com/explosion/spacy-models/releases/download/en_core_
 
 then execute 
 ```
-python -m psibench.eval.emtional_compare 3
+bash run_emotional_compare_all.sh
 ```
