@@ -65,41 +65,14 @@ class PTCClassifier:
         """
         formatted = []
         for msg in history:
-            role = "Therapist" if msg["role"] == "user" else "Assistant"
+            # Skip empty messages
+            if not msg.get("content", "").strip():
+                continue
+            role = "THERAPIST" if msg["role"] == "user" else "PATIENT"
             content = msg["content"]
             formatted.append(f"{role}: {content}")
             
         return "\n".join(formatted)
-    
-    def classify_conversation_by_conversation(self, messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-        """Classify all patient turns in a conversation in one LLM call with JSON output.
-        
-        Args:
-            messages: List of conversation messages containing both patient and therapist turns
-            
-        Returns:
-            List of classifications for each patient turn with turn_index, content, and classification
-        """
-        # Format the conversation history using parent's method
-        conversation_str = self._format_history(messages)
-        
-        # Create conversation-level prompt and chain
-        conversation_prompt = create_ptc_judge_conversation_prompt()
-        conversation_chain = conversation_prompt | self.llm
-        
-        # Get response
-        result = conversation_chain.invoke({
-            "conversation": conversation_str
-        })
-        
-        # Parse JSON response with repair_json
-        response_text = result.content.strip()
-        try:
-            classifications = repair_json(response_text, return_objects=True)
-            return classifications
-            
-        except Exception as e:
-            raise ValueError(f"Error parsing JSON response: {e}\nResponse was: {response_text}")
 
     def classify_conversations_batch(self, conversations: List[List[Dict[str, str]]]) -> List[List[Dict[str, Any]]]:
         """Batch classify multiple conversations using litellm.batch_completion.
@@ -177,196 +150,122 @@ class PTCClassifier:
         return results
 
 
-def analyze_conversation_file(file_path: Path, judge: PTCClassifier) -> Dict[str, Any]:
-    """Analyze a single conversation file.
+def analyze_conversations(
+    judge: PTCClassifier,
+    output_dir: Path,
+    batch_size: int = 1,
+    dataset: str = None,
+    indices: List[int] = None,
+    data_dir: Path = None
+) -> pd.DataFrame:
+    """Analyze conversations from either real dataset or synthetic files.
     
     Args:
-        file_path: Path to conversation JSON file
-        judge: PTCClassifier instance
-        
-    Returns:
-        Dictionary with conversation analysis
-    """
-    with open(file_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    messages = data.get('messages', [])
-    classifications = judge.classify_conversation_by_conversation(messages)
-    
-    # Calculate distribution (exclude F from ratios)
-    ptc_counts = Counter([c['classification'] for c in classifications])
-    total = len(classifications)
-    # Count only P, T, C for ratio calculation (exclude F)
-    non_filler_total = sum([ptc_counts.get(cat, 0) for cat in ['P', 'T', 'C']])
-    
-    return {
-        'file': file_path.name,
-        'total_patient_turns': total,
-        'non_filler_turns': non_filler_total,
-        'P_count': ptc_counts.get('P', 0),
-        'T_count': ptc_counts.get('T', 0),
-        'C_count': ptc_counts.get('C', 0),
-        'F_count': ptc_counts.get('F', 0),
-        'P_ratio': ptc_counts.get('P', 0) / non_filler_total if non_filler_total > 0 else 0,
-        'T_ratio': ptc_counts.get('T', 0) / non_filler_total if non_filler_total > 0 else 0,
-        'C_ratio': ptc_counts.get('C', 0) / non_filler_total if non_filler_total > 0 else 0,
-        'F_ratio': ptc_counts.get('F', 0) / total if total > 0 else 0,
-        'classifications': classifications
-    }
-
-
-def analyze_real_dataset(dataset: str, indices: List[int], judge: PTCClassifier, output_dir: Path, batch_size: int = 1) -> pd.DataFrame:
-    """Analyze real conversations from eeyore dataset.
-    
-    Args:
-        dataset: Dataset type (e.g., 'esc', 'hope')
-        indices: List of conversation indices to analyze
         judge: PTCClassifier instance
         output_dir: Directory to save results
         batch_size: Number of conversations to process in parallel
+        dataset: Dataset type for real conversations (e.g., 'esc', 'hope'). If provided, loads from eeyore dataset.
+        indices: List of conversation indices (required if dataset is provided)
+        data_dir: Directory containing synthetic conversation JSON files (alternative to dataset/indices)
         
     Returns:
         DataFrame with analysis results
     """
     results = []
-    
-    # Load the dataset
-    eeyore_df = load_eeyore_dataset(dataset_type=dataset, indices=indices)
-    
-    print(f"Analyzing {len(eeyore_df)} real conversations from {dataset} dataset")
-    print(f"Batch size: {batch_size}")
-    
-    # Prepare all conversations
     all_conversations = []
-    all_indices = []
-    for idx, row in eeyore_df.iterrows():
-        all_conversations.append(row["messages"])
-        all_indices.append(idx)
+    conversation_ids = []  # Store identifiers (indices or filenames)
+    
+    # Load conversations based on source
+    if dataset is not None and indices is not None:
+        # Load from real dataset
+        eeyore_df = load_eeyore_dataset(dataset_type=dataset, indices=indices)
+        print(f"Analyzing {len(eeyore_df)} real conversations from {dataset} dataset")
+        
+        for idx, row in eeyore_df.iterrows():
+            all_conversations.append(row["messages"])
+            conversation_ids.append(('real', idx))
+            
+    elif data_dir is not None:
+        # Load from synthetic files
+        session_files = sorted(data_dir.glob('session_*.json'))
+        print(f"Analyzing {len(session_files)} conversations from {data_dir}")
+        
+        for session_file in session_files:
+            try:
+                with open(session_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                all_conversations.append(data.get('messages', []))
+                conversation_ids.append(('synthetic', session_file))
+            except Exception as e:
+                print(f"Error loading {session_file}: {e}")
+                continue
+    else:
+        raise ValueError("Must provide either (dataset and indices) or data_dir")
+    
+    print(f"Batch size: {batch_size}")
     
     # Process in batches
     for batch_start in tqdm(range(0, len(all_conversations), batch_size), desc="Classifying conversations"):
         batch_end = min(batch_start + batch_size, len(all_conversations))
         batch_conversations = all_conversations[batch_start:batch_end]
-        batch_indices = all_indices[batch_start:batch_end]
+        batch_ids = conversation_ids[batch_start:batch_end]
         
         try:
-            if batch_size == 1:
-                # Single conversation processing
-                classifications_list = [judge.classify_conversation_by_conversation(batch_conversations[0])]
-            else:
-                # Batch processing
-                classifications_list = judge.classify_conversations_batch(batch_conversations)
+            classifications_list = judge.classify_conversations_batch(batch_conversations)
             
             # Process results
-            for idx, classifications in zip(batch_indices, classifications_list):
-                ptc_counts = Counter([c['classification'] for c in classifications])
-                total = len(classifications)
-                non_filler_total = sum([ptc_counts.get(cat, 0) for cat in ['P', 'T', 'C']])
+            for conv_id, classifications, messages in zip(batch_ids, classifications_list, batch_conversations):
+                # Count expected non-empty patient turns
+                expected_patient_turns = sum(1 for msg in messages 
+                                              if msg.get('role') == 'assistant' and msg.get('content', '').strip())
                 
-                result = {
-                    'file': f'real_conversation_{idx}',
-                    'index': idx,
-                    'total_patient_turns': total,
-                    'non_filler_turns': non_filler_total,
-                    'P_count': ptc_counts.get('P', 0),
-                    'T_count': ptc_counts.get('T', 0),
-                    'C_count': ptc_counts.get('C', 0),
-                    'F_count': ptc_counts.get('F', 0),
-                    'P_ratio': ptc_counts.get('P', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'T_ratio': ptc_counts.get('T', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'C_ratio': ptc_counts.get('C', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'F_ratio': ptc_counts.get('F', 0) / total if total > 0 else 0,
-                    'classifications': classifications
-                }
-                
-                results.append(result)
-                
-                # Save detailed classification for this conversation
-                detail_path = output_dir / 'details' / f"conversation_{idx}_ptc.json"
-                detail_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                with open(detail_path, 'w', encoding='utf-8') as f:
-                    json.dump(result, f, indent=2, ensure_ascii=False)
+                # Validate classification count
+                actual_classifications = len(classifications)
+                conv_identifier = f"conversation {conv_id[1]}" if conv_id[0] == 'real' else conv_id[1].name
+                if actual_classifications != expected_patient_turns:
+                    print(f"WARNING: Classification mismatch for {conv_identifier}: expected {expected_patient_turns} patient turns, got {actual_classifications} classifications")
+                    # Save debug output
+                    debug_filename = f"debug_{conv_id[0]}_{Path(str(conv_id[1])).stem if conv_id[0] == 'synthetic' else conv_id[1]}.json"
+                    debug_path = output_dir / "debug" / debug_filename
+                    debug_path.parent.mkdir(parents=True, exist_ok=True)
                     
-        except Exception as e:
-            print(f"Error processing batch starting at {batch_start}: {e}")
-            continue
-    
-    return pd.DataFrame(results)
-
-
-def analyze_dataset(data_dir: Path, judge: PTCClassifier, output_dir: Path, batch_size: int = 1) -> pd.DataFrame:
-    """Analyze all conversations in a dataset (synthetic data from files).
-    
-    Args:
-        data_dir: Directory containing conversation JSON files
-        judge: PTCClassifier instance
-        output_dir: Directory to save results
-        batch_size: Number of conversations to process in parallel
-        
-    Returns:
-        DataFrame with analysis results
-    """
-    results = []
-    
-    # Find all session files
-    session_files = sorted(data_dir.glob('session_*.json'))
-    
-    print(f"Analyzing {len(session_files)} conversations from {data_dir}")
-    print(f"Batch size: {batch_size}")
-    
-    # Load all conversations
-    all_conversations = []
-    all_files = []
-    for session_file in session_files:
-        try:
-            with open(session_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            all_conversations.append(data.get('messages', []))
-            all_files.append(session_file)
-        except Exception as e:
-            print(f"Error loading {session_file}: {e}")
-            continue
-    
-    # Process in batches
-    for batch_start in tqdm(range(0, len(all_conversations), batch_size), desc="Classifying conversations"):
-        batch_end = min(batch_start + batch_size, len(all_conversations))
-        batch_conversations = all_conversations[batch_start:batch_end]
-        batch_files = all_files[batch_start:batch_end]
-        
-        try:
-            if batch_size == 1:
-                # Single conversation processing
-                classifications_list = [judge.classify_conversation_by_conversation(batch_conversations[0])]
-            else:
-                # Batch processing
-                classifications_list = judge.classify_conversations_batch(batch_conversations)
-            
-            # Process results
-            for session_file, classifications in zip(batch_files, classifications_list):
+                    debug_output = {
+                        "conversation_id": conv_identifier,
+                        "expected_patient_turns": expected_patient_turns,
+                        "actual_classifications": actual_classifications,
+                        "input_messages": messages,
+                        "output_classifications": classifications
+                    }
+                    
+                    with open(debug_path, 'w', encoding='utf-8') as f:
+                        json.dump(debug_output, f, indent=2, ensure_ascii=False)
+                    
+                    print(f"Debug output saved to {debug_path}")
+                
                 ptc_counts = Counter([c['classification'] for c in classifications])
                 total = len(classifications)
                 non_filler_total = sum([ptc_counts.get(cat, 0) for cat in ['P', 'T', 'C']])
                 
-                result = {
-                    'file': session_file.name,
-                    'total_patient_turns': total,
-                    'non_filler_turns': non_filler_total,
-                    'P_count': ptc_counts.get('P', 0),
-                    'T_count': ptc_counts.get('T', 0),
-                    'C_count': ptc_counts.get('C', 0),
-                    'F_count': ptc_counts.get('F', 0),
-                    'P_ratio': ptc_counts.get('P', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'T_ratio': ptc_counts.get('T', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'C_ratio': ptc_counts.get('C', 0) / non_filler_total if non_filler_total > 0 else 0,
-                    'F_ratio': ptc_counts.get('F', 0) / total if total > 0 else 0,
-                    'classifications': classifications
-                }
+                # Build result dict based on source type
+                result = { 
+                        'total_patient_turns': total,
+                        'non_filler_turns': non_filler_total,
+                        'P_count': ptc_counts.get('P', 0),
+                        'T_count': ptc_counts.get('T', 0),
+                        'C_count': ptc_counts.get('C', 0),
+                        'F_count': ptc_counts.get('F', 0),
+                        'P_ratio': ptc_counts.get('P', 0) / non_filler_total if non_filler_total > 0 else 0,
+                        'T_ratio': ptc_counts.get('T', 0) / non_filler_total if non_filler_total > 0 else 0,
+                        'C_ratio': ptc_counts.get('C', 0) / non_filler_total if non_filler_total > 0 else 0,
+                        'F_ratio': ptc_counts.get('F', 0) / total if total > 0 else 0,
+                        'classifications': classifications
+                        }
+                detail_filename = f"session_{conv_id[1]}_ptc.json"
                 
                 results.append(result)
                 
                 # Save detailed classification for this conversation
-                detail_path = output_dir / 'details' / f"{session_file.stem}_ptc.json"
+                detail_path = output_dir / detail_filename
                 detail_path.parent.mkdir(parents=True, exist_ok=True)
                 
                 with open(detail_path, 'w', encoding='utf-8') as f:
@@ -670,10 +569,12 @@ def main():
         print(f"Found {len(indices)} conversations to analyze")
         print(f"Batch size: {args.batch_size}")
         print(f"Analyzing corresponding real conversations from {args.dataset} dataset...")
-        real_df = analyze_real_dataset(args.dataset, indices, judge, output_dir / 'real', batch_size=args.batch_size)
+        real_df = analyze_conversations(judge, output_dir / 'real', batch_size=args.batch_size, 
+                                        dataset=args.dataset, indices=indices)
         
         print("\nAnalyzing synthetic conversations...")
-        synthetic_df = analyze_dataset(synthetic_dir, judge, output_dir / 'synthetic', batch_size=args.batch_size)
+        synthetic_df = analyze_conversations(judge, output_dir / 'synthetic', batch_size=args.batch_size,
+                                             data_dir=synthetic_dir)
         
         print("\nComparing distributions...")
         compare_distributions(real_df, synthetic_df, output_dir, judge)
@@ -684,7 +585,8 @@ def main():
     elif args.synthetic_dir:
         # Analyze synthetic only
         print("Analyzing synthetic conversations...")
-        df = analyze_dataset(Path(args.synthetic_dir), judge, output_dir, batch_size=args.batch_size)    
+        df = analyze_conversations(judge, output_dir, batch_size=args.batch_size,
+                                   data_dir=Path(args.synthetic_dir))    
     else:
         print("Error: Please provide --real-dir and/or --synthetic-dir")
         return

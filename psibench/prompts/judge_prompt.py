@@ -40,7 +40,11 @@ Your task is to classify EACH patient turn from a therapy session into one of fo
 - Is small talk or neutral procedural social responses
 
 Analyze each patient turn carefully, considering both the content and emotional tone.
+Note: The conversation follows a strict turn-taking structure between the patient and the therapist — the patient never speaks twice in a row.
+Each patient message always begins with "PATIENT:" and may contain newline characters (\n or \n\n) for formatting. \
+    Do not treat newline characters as separate messages; they are part of the same patient message.
 
+You must classify EVERY patient turn, including greetings, in the conversation.
 You must respond with ONLY a JSON array. Each element should have:
 - "content": the patient's message
 - "classification": one of P, T, C, or F
@@ -49,7 +53,11 @@ Output example:
 ```json
     [
     {{
-        "content": "I feel so lost and don't know what to do.",
+        "content": "Hello.",
+        "classification": "F"
+    }},
+    {{
+        "content": "Hi \n\n I feel so lost and don't know what to do.\n\n Everything seems overwhelming.",
         "classification": "P"
     }},
     {{
