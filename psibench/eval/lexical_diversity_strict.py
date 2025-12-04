@@ -311,13 +311,15 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
     # 1. Boxplots: MTLD by Speaker Type (Raw vs Matched)
     # Filter out Cumulative/Turn-Level for this plot
     main_df = df[df['analysis_type'].isin(['Raw', 'Matched'])]
+    num_sessions = df['session_id'].nunique()
     
     if not main_df.empty:
         plt.figure(figsize=(12, 6))
         sns.boxplot(data=main_df, x='analysis_type', y='mtld', hue='speaker_type')
-        plt.title('MTLD Distribution: Real vs Synthetic (Raw vs Matched)')
+        plt.title(f'MTLD Distribution: Real vs Synthetic (Raw vs Matched) (N={num_sessions})')
         plt.ylabel('Bidirectional MTLD')
         plt.xlabel('Analysis Strategy')
+        plt.legend(title='')
         plt.tight_layout()
         plt.savefig(output_dir / 'boxplot_mtld_comparison.png')
         plt.close()
@@ -339,9 +341,10 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
             palette=palette,
             alpha=0.7
         )
-        plt.title('MTLD vs Token Count (Raw Aggregated Data)')
+        plt.title(f'MTLD vs Token Count (Raw Aggregated Data) (N={num_sessions})')
         plt.xlabel('Token Count')
         plt.ylabel('Bidirectional MTLD')
+        plt.legend(title='')
         plt.tight_layout()
         plt.savefig(output_dir / 'scatter_mtld_vs_tokens.png')
         plt.close()
@@ -371,10 +374,14 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
             lw=3,
             legend=False
         )
+            
         
-        plt.title('Cumulative MTLD Progression (All Sessions)')
+        plt.title(f'Cumulative MTLD Progression (All Sessions) (N={num_sessions})')
         plt.xlabel('Turn Index')
         plt.ylabel('Cumulative MTLD')
+        # Re-add legend for the first plot since we want to identify speakers, but remove title
+        # Note: The first lineplot created the legend. We can access it via plt.legend()
+        plt.legend(title='')
         plt.tight_layout()
         plt.savefig(output_dir / 'lineplot_cumulative_mtld_all.png')
         plt.close()
@@ -459,6 +466,8 @@ def main():
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
     parser.add_argument("--output-dir", type=str, default="output/lexical_diversity_strict", help="Output directory")
     parser.add_argument("-k", "--num-samples", type=int, help="Number of samples to analyze")
+    parser.add_argument("--turn-min", type=int, help="Minimum number of patient turns (inclusive)")
+    parser.add_argument("--turn-max", type=int, help="Maximum number of patient turns (inclusive)")
     
     args = parser.parse_args()
     
@@ -475,6 +484,17 @@ def main():
 
     # Setup Output Directory
     output_dir = Path(args.output_dir) / args.psi / args.dataset
+    
+    # Append turn info to output dir if specified
+    turn_info = []
+    if args.turn_min is not None:
+        turn_info.append(f"turn_min{args.turn_min}")
+    if args.turn_max is not None:
+        turn_info.append(f"turn_max{args.turn_max}")
+        
+    if turn_info:
+        output_dir = output_dir / "_".join(turn_info)
+        
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Find all unique indices from session files
@@ -522,6 +542,18 @@ def main():
         except Exception as e:
             print(f"Error loading synthetic data for {idx}: {e}")
             continue
+
+        # Filter by Turn Count (Real and Synthetic)
+        real_turns = len(real_msgs)
+        synth_turns = len(synth_msgs)
+        
+        if args.turn_min is not None:
+            if real_turns < args.turn_min or synth_turns < args.turn_min:
+                continue
+                
+        if args.turn_max is not None:
+            if real_turns > args.turn_max or synth_turns > args.turn_max:
+                continue
             
         # Load Synthetic Turn Data (Optional)
         synth_turn_msgs = None

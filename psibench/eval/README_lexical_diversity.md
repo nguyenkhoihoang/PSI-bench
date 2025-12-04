@@ -84,10 +84,23 @@ We utilize a minimum threshold of **100 tokens** for flagging reliable MTLD scor
 *   **Fergadiotis, G., Wright, H. H., & West, T. M. (2015).** Psychometric Evaluation of Lexical Diversity Indices: Assessing Length Effects. *Journal of Speech, Language, and Hearing Research*, 58(3), 840–852.
     > "MTLD did not correlate strongly with TTR (r = .32), a measure known to be influenced by length... Koizumi and In’nami (2012) reported additional supporting evidence... They found that MTLD was minimally related to length, especially in samples that were longer than 100 tokens."
 
-## 7. Usage Example
+## 7. Filtering
+
+You can filter the analysis based on the number of patient (assistant) turns in the conversation using the `--turn-min` and `--turn-max` arguments.
+
+*   **Logic**: A session is included **only if** both the Real and Synthetic conversations have a turn count within the specified range (inclusive).
+*   **Output**: When these arguments are used, the results are saved in a subdirectory reflecting the filter (e.g., `output/.../turn_min12_turn_max12/`).
+
+## 8. Usage Example
 
 To run the analysis, use the following command:
 
 ```bash
-python -m psibench.eval.lexical_diversity_strict --data-dir /work/hdd/bfjp/data/synthetic/eeyore/hosted_vllm_meta-llama_Llama-3.3-70B-Instruct/esc --real-data-dir /work/hdd/bfjp/tahsu2/PSI-bench/data/real --psi eeyore --dataset esc --k 1
+python -m psibench.eval.lexical_diversity_strict \
+    --data-dir /work/hdd/bfjp/data/synthetic/eeyore/hosted_vllm_meta-llama_Llama-3.3-70B-Instruct/esc \
+    --real-data-dir /work/hdd/bfjp/tahsu2/PSI-bench/data/real \
+    --psi eeyore \
+    --dataset esc \
+    --turn-min 10 \
+    --turn-max 20
 ```
