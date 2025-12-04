@@ -2,11 +2,12 @@
 
 # Define datasets and psi values
 datasets=("esc" "hope" "annomi")
-psis=("eeyore" "roleplaydoh" "patientpsi")
+# psis=("eeyore" "roleplaydoh" "patientpsi")
+psis=("eeyore")
 
 # Define the batch size (max possible) and other parameters
-config="configs/llama-3.3-70b-instruct.yaml"
-output_dir="/work/hdd/bfjp/data/synthetic"
+config="configs/gpt-oss-120b.yaml"
+output_dir="/work/hdd/bfjp/data/synthetic/test/"
 # Get the directory where this script is located
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 # Directory to store log files
@@ -21,7 +22,7 @@ for dataset in "${datasets[@]}"; do
   for psi in "${psis[@]}"; do
     echo "Running for dataset: $dataset, psi: $psi"
     # nohup python -m psibench.generate_conversations 
-    nohup python -m psibench.generate_next_turn \
+    nohup python -m psibench.generate_conversations \
       --dataset "$dataset" \
       --psi "$psi" \
       --batch-size 32 \

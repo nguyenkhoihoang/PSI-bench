@@ -46,53 +46,71 @@ class PatientAgent(BaseAgent):
         Returns:
             The patient's response
         """
-        if self.psi == "eeyore":
-            inputs = {
-                "eeyore_system_prompt": self.patient_profile.get(
-                    "eeyore_system_prompt", ""
-                ),
-                "conversation_history": self._format_history(conversation_history),
-                "therapist_message": therapist_message,
-            }
-            # print(self.prompt.format(**inputs)) # Commented out print statement
-            response = await self.chain.ainvoke(inputs)
-            return response.content.strip()
-        
-        elif self.psi == "roleplaydoh":
-
-            # Initial response generation using a basic prompt
-            inputs = {
-                "conversation_history": self._format_history(conversation_history),
-                "therapist_message": therapist_message,
-            }
-            initial_response = await self.chain.ainvoke(inputs)
-            parsed_response = initial_response.content.strip()
-
-            # Prepare prompts for roleplay_doh_pipeline
-            # The pipeline expects a list of dicts with "role" and "content"
-            prompts_for_pipeline = conversation_history + [
-                {"role": "user", "content": therapist_message}
-            ]
-
-            # Refine the response using roleplay_doh_pipeline
-            refined_response = await roleplay_doh_rewrite_response(
-                self.llm,  # client
-                prompts_for_pipeline,  # initial_prompts
-                parsed_response,  # response_content
-                self.patient_profile,  # profile
-            )
-
-            return refined_response
-        
-        elif self.psi == "patientpsi":
-            #The patient profile consists of the system prompt itself
-            inputs = {
-                "system_prompt": self.patient_profile,
-                "conversation_history": self._format_history(conversation_history),
-                "therapist_message": therapist_message,
-            }
-            response = await self.chain.ainvoke(inputs)
-            return response.content.strip()
+        try:
+            if self.psi == "eeyore":
+                inputs = {
+                    "eeyore_system_prompt": self.patient_profile.get(
+                        "eeyore_system_prompt", ""
+                    ),
+                    "conversation_history": self._format_history(conversation_history),
+                    "therapist_message": therapist_message,
+                }
+                # print(self.prompt.format(**inputs)) # Commented out print statement
             
-        else:
-            pass
+                response = await self.chain.ainvoke(inputs)
+                return response.content.strip()  
+            
+            elif self.psi == "roleplaydoh":
+                # Initial response generation using a basic prompt
+                inputs = {
+                    "conversation_history": self._format_history(conversation_history),
+                    "therapist_message": therapist_message,
+                }
+                
+                initial_response = await self.chain.ainvoke(inputs)
+      
+                parsed_response = initial_response.content.strip()
+
+                # Prepare prompts for roleplay_doh_pipeline
+                # The pipeline expects a list of dicts with "role" and "content"
+                prompts_for_pipeline = conversation_history + [
+                    {"role": "user", "content": therapist_message}
+                ]
+
+                # Refine the response using roleplay_doh_pipeline
+                refined_response = await roleplay_doh_rewrite_response(
+                    self.llm,  # client
+                    prompts_for_pipeline,  # initial_prompts
+                    parsed_response,  # response_content
+                    self.patient_profile,  # profile
+                )
+                return refined_response
+            
+            elif self.psi == "patientpsi":
+                #The patient profile consists of the system prompt itself
+                inputs = {
+                    "system_prompt": self.patient_profile,
+                    "conversation_history": self._format_history(conversation_history),
+                    "therapist_message": therapist_message,
+                }
+                response = await self.chain.ainvoke(inputs)
+                return response.content.strip()
+            else:
+                pass
+        except Exception as e:
+            if "max_tokens must be at least 1" in str(e):
+                history_str = self._format_history(conversation_history)
+                sys_prompt = self.patient_profile.get("eeyore_system_prompt", "")
+                latest = therapist_message or ""
+                approx = lambda s: len(s) // 4
+                print("\n[DEBUG] Context too large for patient (eeyore):")
+                print(f"  messages_count: {len(conversation_history)}")
+                print(f"  system_prompt_chars: {len(sys_prompt)}, approx_tokens: {approx(sys_prompt)}")
+                print(f"  history_chars: {len(history_str)}, approx_tokens: {approx(history_str)}")
+                print(f"  latest_msg_chars: {len(latest)}, approx_tokens: {approx(latest)}")
+                max_tokens = self.config.get(self.agent_type, {}).get("max_tokens")
+                if max_tokens is not None:
+                    print(f"  configured_max_tokens: {max_tokens}")
+                print("  Hint: reduce system prompt or history size.")
+            raise
+            

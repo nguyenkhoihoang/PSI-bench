@@ -42,22 +42,41 @@ class BaseAgent:
             api_key=api_key,
             api_base=api_base,
             temperature=config.get(agent_type).get("temperature"),
+            max_tokens=config.get(agent_type).get("max_tokens", 2000),
         )
     
-    def _format_history(self, history: list[Dict[str, str]]) -> str:
+    def _format_history(self, history: list[Dict[str, str]], max_history_tokens: int = 6000) -> str:
         """Format conversation history for the prompt.
         
         Args:
             history: List of conversation messages
+            max_history_tokens: Maximum approximate tokens for history (default: 6000)
             
         Returns:
-            Formatted conversation history string
+            Formatted conversation history string, truncated if necessary
         """
         if not history:
             return "Beginning of session."
         
+        # Truncate history if it's too long to prevent context overflow
+        # Keep recent messages (estimate ~4 chars per token)
+        truncated_history = history
+        if len(history) > 10:  # Only truncate if we have many messages
+            estimated_tokens = sum(len(msg.get("content", "")) for msg in history) // 4
+            if estimated_tokens > max_history_tokens:
+                # Keep last N messages that fit within token limit
+                truncated_history = []
+                current_tokens = 0
+                for msg in reversed(history):
+                    msg_tokens = len(msg.get("content", "")) // 4
+                    if current_tokens + msg_tokens > max_history_tokens:
+                        break
+                    truncated_history.insert(0, msg)
+                    current_tokens += msg_tokens
         formatted = []
-        for msg in history:
+        if len(truncated_history) < len(history):
+            formatted.append("[Earlier messages truncated...]")
+        for msg in truncated_history:
             role = msg["role"].capitalize()
             content = msg["content"]
             formatted.append(f"{role}: {content}")
