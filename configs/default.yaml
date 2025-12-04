@@ -14,3 +14,12 @@ therapist:
   model: "gpt-4.1-mini"
   temperature: 0.5
   max_tokens: 1000
+
+eval:
+  ptc_classifier:
+    # model: "gpt-4.1-mini"
+    # temperature: 0.5
+    model: "hosted_vllm/openai/gpt-oss-120b"
+    temperature: 0.5
+    history_limit: 32 # only classify the first 32 messages in the conversation
+    api_base: "http://141.142.254.223:9000/v1"
