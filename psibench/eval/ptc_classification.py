@@ -481,10 +481,14 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     
     # 1. Stacked bar chart of average P, T, C, F ratios
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    
+
     colors = ['#e74c3c', '#f39c12', '#27ae60', '#95a5a6']
     labels = ['Problem', 'Transition', 'Change', 'Filler']
-    
+
+    # Count conversations
+    n_real = len(real_df)
+    n_synth = len(synthetic_df)
+
     # Real stacked bar
     bottom = 0
     real_values = real_means + [real_filler_mean]
@@ -495,15 +499,17 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
             axes[0].text(0, bottom + value/2, f'{value:.2f}', 
                     ha='center', va='center', fontsize=12, fontweight='bold')
         bottom += value
-    
+    # Add conversation count label above bar
+    axes[0].text(0, 1.03, f'n={n_real}', ha='center', va='bottom', fontsize=13, fontweight='bold', color='black')
+
     axes[0].set_xlim([-0.5, 0.5])
-    axes[0].set_ylim([0, 1])
+    axes[0].set_ylim([0, 1.1])
     axes[0].set_ylabel('Ratio', fontsize=12)
     axes[0].set_title('Real Conversations', fontsize=14, fontweight='bold')
     axes[0].set_xticks([])
     axes[0].legend(loc='upper right')
     axes[0].grid(axis='y', alpha=0.3)
-    
+
     # Synthetic stacked bar
     bottom = 0
     synthetic_values = synthetic_means + [synthetic_filler_mean]
@@ -514,15 +520,17 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
             axes[1].text(0, bottom + value/2, f'{value:.2f}', 
                         ha='center', va='center', fontsize=12, fontweight='bold')
         bottom += value
-    
+    # Add conversation count label above bar
+    axes[1].text(0, 1.03, f'n={n_synth}', ha='center', va='bottom', fontsize=13, fontweight='bold', color='black')
+
     axes[1].set_xlim([-0.5, 0.5])
-    axes[1].set_ylim([0, 1])
+    axes[1].set_ylim([0, 1.1])
     axes[1].set_ylabel('Ratio', fontsize=12)
     axes[1].set_title('Synthetic Conversations', fontsize=14, fontweight='bold')
     axes[1].set_xticks([])
     axes[1].legend(loc='upper right')
     axes[1].grid(axis='y', alpha=0.3)
-    
+
     plt.suptitle('Average PTCF Distribution', fontsize=16, fontweight='bold', y=0.98)
     plt.tight_layout()
     plt.savefig(output_dir / 'ptc_stacked_average.png', dpi=300, bbox_inches='tight')
@@ -532,9 +540,12 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     # Filter to conversations with at least turn_threshold patient messages
     real_df_filtered = real_df[real_df['total_patient_turns'] >= turn_threshold].copy()
     synthetic_df_filtered = synthetic_df[synthetic_df['total_patient_turns'] >= turn_threshold].copy()
-    
-    print(f"\nFiltered to {len(real_df_filtered)} real and {len(synthetic_df_filtered)} synthetic conversations with ≥turn_threshold turns")
-    
+
+    n_real_filtered = len(real_df_filtered)
+    n_synth_filtered = len(synthetic_df_filtered)
+
+    print(f"\nFiltered to {n_real_filtered} real and {n_synth_filtered} synthetic conversations with ≥turn_threshold turns")
+
     # Get turn-by-turn data
     real_turns = get_turn_classifications(real_df_filtered)
     synthetic_turns = get_turn_classifications(synthetic_df_filtered)
@@ -553,13 +564,13 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     synthetic_avg = synthetic_turns.groupby('turn_index')['ptc_numeric'].mean().reset_index()
     
     fig, ax = plt.subplots(figsize=(14, 6))
-    
+
     # Plot step lines for non-filler turns only
     ax.step(real_avg['turn_index'], real_avg['ptc_numeric'], 
-            where='mid', label='Real', linewidth=2.5, alpha=0.8, color='steelblue')
+            where='mid', label=f'Real (n={n_real_filtered})', linewidth=2.5, alpha=0.8, color='steelblue')
     ax.step(synthetic_avg['turn_index'], synthetic_avg['ptc_numeric'], 
-            where='mid', label='Synthetic', linewidth=2.5, alpha=0.8, color='coral')
-    
+            where='mid', label=f'Synthetic (n={n_synth_filtered})', linewidth=2.5, alpha=0.8, color='coral')
+
     ax.set_xlabel('Turn Index', fontsize=12)
     ax.set_ylabel('PTC Classification', fontsize=12)
     ax.set_title(f'Average PTC Progression (First {turn_threshold} Turns, Conversations with ≥{turn_threshold} Turns)', 
@@ -568,14 +579,18 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     ax.set_yticklabels(['Problem (P)', 'Transition (T)', 'Change (C)'])
     ax.set_ylim([0.5, 3.5])
     ax.set_xlim([-0.5, turn_threshold - 0.5])
-    
+
     # Force x-axis to show only integer values
     from matplotlib.ticker import MaxNLocator
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    
+
+    # Add annotation for number of conversations
+    ax.annotate(f'Real n={n_real_filtered}', xy=(0.01, 0.97), xycoords='axes fraction', fontsize=12, color='steelblue', fontweight='bold', ha='left', va='top')
+    ax.annotate(f'Synthetic n={n_synth_filtered}', xy=(0.01, 0.90), xycoords='axes fraction', fontsize=12, color='coral', fontweight='bold', ha='left', va='top')
+
     ax.legend(fontsize=10, loc='best')
     ax.grid(True, alpha=0.3)
-    
+
     plt.tight_layout()
     plt.savefig(output_dir / 'ptc_progression_stepline.png', dpi=300, bbox_inches='tight')
     plt.close()
