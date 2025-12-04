@@ -19,6 +19,51 @@ from psibench.agents.therapist import TherapistAgent
 from psibench.models.eeyore import prepare_prompt_from_profile
 from psibench.models.patient_psi import generate_chain
 
+
+def validate_patient_turns(messages: list, expected_num_patient_turns: int) -> bool:
+    """Validate that the number of non-empty patient messages matches expected count.
+    
+    Args:
+        messages: List of conversation messages
+        expected_num_patient_turns: Expected number of patient turns
+        
+    Returns:
+        True if validation passes, False otherwise
+    """
+    actual_patient_turns = sum(
+        1 for msg in messages 
+        if msg.get('role') == 'assistant' and msg.get('content', '').strip()
+    )
+    return actual_patient_turns == expected_num_patient_turns
+
+
+def session_exists_and_valid(output_path: Path) -> bool:
+    """Check if session file exists and passes validation.
+    
+    Args:
+        output_path: Path to the session JSON file
+        
+    Returns:
+        True if file exists and passes validation, False otherwise
+    """
+    if not output_path.exists():
+        return False
+    
+    try:
+        with open(output_path, 'r', encoding='utf-8') as f:
+            session_data = json.load(f)
+        
+        messages = session_data.get('messages', [])
+        expected_turns = session_data.get('num_patient_turns')
+        
+        if expected_turns is None:
+            return False
+        
+        return validate_patient_turns(messages, expected_turns)
+    except Exception:
+        return False
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -63,7 +108,6 @@ async def run_session(
     patient = PatientAgent(patient_profile=profile, config=config)
     therapist = TherapistAgent(config=config)
 
-
     messages = []
     
     # Calculate number of patient turns from real messages
@@ -90,7 +134,18 @@ async def run_session(
     except Exception as e:
         print(f"Session ended early due to error: {e}")
 
-    return {"messages": messages, "profile": profile}
+    # Validate num_patient_turns matches actual non-empty assistant messages
+    if not validate_patient_turns(messages, num_patient_turns):
+        actual_patient_turns = sum(
+            1 for msg in messages 
+            if msg.get('role') == 'assistant' and msg.get('content', '').strip()
+        )
+        raise ValueError(
+            f"Data quality check FAILED: num_patient_turns={num_patient_turns} but "
+            f"found {actual_patient_turns} non-empty assistant messages. "
+        )
+    
+    return {"messages": messages, "profile": profile, "num_patient_turns": num_patient_turns}
 
 
 def save_session_results(
@@ -148,26 +203,41 @@ async def main():
             continue
     
     # Process tasks in batches
+    skipped_count = 0
     for batch_start in range(0, len(all_tasks), args.batch_size):
         batch_end = min(batch_start + args.batch_size, len(all_tasks))
         batch = all_tasks[batch_start:batch_end]
         
+        # Filter tasks: skip sessions that already exist and are valid
+        tasks_to_run = []
+        for idx, profile, real_messages in batch:
+            output_path = output_dir / f"session_{idx}.json"
+            if session_exists_and_valid(output_path):
+                print(f"Skipping session {idx} (already exists and passes validation)")
+                skipped_count += 1
+            else:
+                tasks_to_run.append((idx, profile, real_messages))
+        
+        if not tasks_to_run:
+            continue
+        
         # Create and execute batch tasks
         batch_coroutines = [
             run_session(profile, real_messages, config=config)
-            for idx, profile, real_messages in batch
+            for idx, profile, real_messages in tasks_to_run
         ]
         
         results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
         
         # Save results for this batch
-        for (idx, _, _), result in zip(batch, results):
+        for (idx, _, _), result in zip(tasks_to_run, results):
             if isinstance(result, Exception):
                 print(f"\nError in session {idx}: {result}")
             else:
                 save_session_results(result, output_dir, idx)
 
     print(f"\nFinished! Session transcripts saved to {output_dir}/")
+    print(f"Skipped {skipped_count} sessions (already valid)")
 
 if __name__ == "__main__":
     start_time = time.time()
