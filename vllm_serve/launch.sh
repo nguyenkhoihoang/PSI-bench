@@ -61,6 +61,6 @@ vllm serve $MODEL_NAME \
     --max-num-seqs 50 \
     --async-scheduling \
     --port $VLLM_SERVER_PORT \
-    --max-model-len 10000 \
+    --max-model-len 20000 \
     --gpu-memory-utilization 0.95 \
     >> $LOG_PATH 2>&1

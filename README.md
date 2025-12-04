@@ -51,6 +51,3 @@ python -m psibench.eval.read_compare_convo --dataset annomi 39
 <!-- (Later: haven't checked since delta GPU been down lately)
 Run eval comparison on delta (may need to edit your account in sbatch script) 
 bash eval_sim.sl -->
-```
-python -m psibench.eval.ptc_classification --dataset esc --synthetic-dir data/synthetic/eeyore/hosted_vllm_openai_gpt-oss-120b/esc/ --compare --batch-size 10
-```

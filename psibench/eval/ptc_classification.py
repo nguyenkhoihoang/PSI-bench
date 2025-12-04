@@ -34,16 +34,19 @@ plt.rcParams['figure.figsize'] = (12, 6)
 class PTCClassifier:
     """Judge for Problem-Transition-Change framework classification."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], debug: bool = False):
         """Initialize the PTC judge.
         
         Args:
             config: Configuration dictionary containing eval.ptc_classifier settings
+            debug: Enable debug logging (default: False)
         """
         # Store model settings for batch completion
+        self.debug = debug
         judge_config = config.get("eval", {}).get("ptc_classifier", {})
         self.model_name = judge_config.get("model")
         self.temperature = judge_config.get("temperature", 0.3)
+        self.history_limit = judge_config.get("history_limit", 20)
         
         # Get API settings
         if judge_config.get("api_base"):
@@ -71,6 +74,8 @@ class PTCClassifier:
             role = "THERAPIST" if msg["role"] == "user" else "PATIENT"
             content = msg["content"]
             formatted.append(f"{role}: {content}")
+            if len(formatted) == self.history_limit:
+                break
             
         return "\n".join(formatted)
 
@@ -90,6 +95,11 @@ class PTCClassifier:
         all_messages = []
         for messages in conversations:
             conversation_str = self._format_history(messages)
+            # Debug: print approximate context size
+            if self.debug:
+                approx_tokens = max(1, len(conversation_str) // 4)
+                print(f"Judge prompt context: ~{approx_tokens} tokens, {len(conversation_str)} chars")
+            
             # Format prompt messages
             formatted_prompt = conversation_prompt.format_messages(conversation=conversation_str)
             # Convert to litellm format - map 'human' to 'user' for OpenAI compatibility
@@ -110,6 +120,8 @@ class PTCClassifier:
                     "content": msg.content
                 })
             all_messages.append(litellm_messages)
+        if self.debug:
+            print(f"Prepared {len(all_messages)} judge calls; first message roles: {[m['role'] for m in all_messages[0]] if all_messages else []}")
         
         # Batch completion call with error handling
         try:
@@ -131,16 +143,58 @@ class PTCClassifier:
                 # Handle different response formats
                 if isinstance(response, str):
                     response_text = response.strip()
-                elif hasattr(response, 'choices') and len(response.choices) > 0:
-                    response_text = response.choices[0].message.content.strip()
+                elif hasattr(response, 'choices') and len(getattr(response, 'choices', [])) > 0:
+                    content = response.choices[0].message.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Batch {i}: choices[0].message.content is None. Full response: {getattr(response, 'dict', lambda: response)() if hasattr(response, 'dict') else response}")
+                        results.append([])
+                        continue
+                    response_text = content.strip()
                 elif hasattr(response, 'message') and hasattr(response.message, 'content'):
-                    response_text = response.message.content.strip()
+                    content = response.message.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Batch {i}: message.content is None. Full response: {getattr(response, 'dict', lambda: response)() if hasattr(response, 'dict') else response}")
+                        results.append([])
+                        continue
+                    response_text = content.strip()
                 elif hasattr(response, 'content'):
-                    response_text = response.content.strip()
+                    content = response.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Batch {i}: content is None. Full response: {getattr(response, 'dict', lambda: response)() if hasattr(response, 'dict') else response}")
+                        results.append([])
+                        continue
+                    response_text = content.strip()
                 else:
                     raise ValueError(f"Unexpected response format: {type(response)}")
                 
                 classifications = repair_json(response_text, return_objects=True)
+                # Normalize common shapes: dict with key, list of dicts, list of strings
+                if isinstance(classifications, dict):
+                    # Try common keys
+                    for key in ('classifications', 'turns', 'labels'):
+                        if key in classifications and isinstance(classifications[key], list):
+                            classifications = classifications[key]
+                            break
+                if isinstance(classifications, list):
+                    # If list of strings, convert to dicts
+                    if all(isinstance(x, str) for x in classifications):
+                        classifications = [{'classification': x} for x in classifications]
+                    # If list-of-lists, unwrap first
+                    elif len(classifications) > 0 and all(isinstance(x, list) for x in classifications):
+                        classifications = classifications[0]
+                
+                # Filter invalid items and log
+                valid_items = []
+                for idx, item in enumerate(classifications if isinstance(classifications, list) else []):
+                    if isinstance(item, dict) and 'classification' in item and isinstance(item['classification'], str):
+                        valid_items.append(item)
+                    else:
+                        if self.debug:
+                            print(f"Batch {i}: Dropping invalid item at pos {idx}: {item}")
+                classifications = valid_items
                 results.append(classifications)
             except Exception as e:
                 print(f"Error parsing batch response {i}: {e}")
@@ -156,7 +210,8 @@ def analyze_conversations(
     batch_size: int = 1,
     dataset: str = None,
     indices: List[int] = None,
-    data_dir: Path = None
+    data_dir: Path = None,
+    session_files: List[Path] = None,
 ) -> pd.DataFrame:
     """Analyze conversations from either real dataset or synthetic files.
     
@@ -174,6 +229,7 @@ def analyze_conversations(
     results = []
     all_conversations = []
     conversation_ids = []  # Store identifiers (indices or filenames)
+    mismatch_count = 0  # Track classification mismatches
     
     # Load conversations based on source
     if dataset is not None and indices is not None:
@@ -187,13 +243,17 @@ def analyze_conversations(
             
     elif data_dir is not None:
         # Load from synthetic files
-        session_files = sorted(data_dir.glob('session_*.json'))
+        # If a specific list of session_files is provided, use that; otherwise glob from data_dir
+        if session_files is None:
+            session_files = sorted(data_dir.glob('session_*.json'))
         print(f"Analyzing {len(session_files)} conversations from {data_dir}")
         
         for session_file in session_files:
             try:
                 with open(session_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                # debug
+                # print(f"Loaded conversation from {session_file} with {len(data.get('messages', []))} messages")
                 all_conversations.append(data.get('messages', []))
                 conversation_ids.append(('synthetic', session_file))
             except Exception as e:
@@ -216,13 +276,15 @@ def analyze_conversations(
             # Process results
             for conv_id, classifications, messages in zip(batch_ids, classifications_list, batch_conversations):
                 # Count expected non-empty patient turns
-                expected_patient_turns = sum(1 for msg in messages 
-                                              if msg.get('role') == 'assistant' and msg.get('content', '').strip())
+                expected_patient_turns = min(judge.history_limit // 2 ,sum(1 for msg in messages 
+                                              if msg.get('role') == 'assistant' and msg.get('content', '').strip()))
                 
                 # Validate classification count
                 actual_classifications = len(classifications)
                 conv_identifier = f"conversation {conv_id[1]}" if conv_id[0] == 'real' else conv_id[1].name
-                if actual_classifications != expected_patient_turns:
+                has_mismatch = actual_classifications != expected_patient_turns
+                if has_mismatch:
+                    mismatch_count += 1
                     print(f"WARNING: Classification mismatch for {conv_identifier}: expected {expected_patient_turns} patient turns, got {actual_classifications} classifications")
                     # Save debug output
                     debug_filename = f"debug_{conv_id[0]}_{Path(str(conv_id[1])).stem if conv_id[0] == 'synthetic' else conv_id[1]}.json"
@@ -258,7 +320,8 @@ def analyze_conversations(
                         'T_ratio': ptc_counts.get('T', 0) / non_filler_total if non_filler_total > 0 else 0,
                         'C_ratio': ptc_counts.get('C', 0) / non_filler_total if non_filler_total > 0 else 0,
                         'F_ratio': ptc_counts.get('F', 0) / total if total > 0 else 0,
-                        'classifications': classifications
+                        'classifications': classifications,
+                        'has_mismatch': has_mismatch
                         }
                 detail_filename = f"session_{conv_id[1]}_ptc.json"
                 
@@ -275,6 +338,17 @@ def analyze_conversations(
             print(f"Error processing batch starting at {batch_start}: {e}")
             continue
     
+    total_conversations = len(results)
+    print(f"\n{'='*60}")
+    print(f"Classification Summary: {mismatch_count}/{total_conversations} conversations had mismatches")
+    print(f"{'='*60}")
+    # Write summary to text file
+    summary_path = output_dir / "classification_summary.txt"
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        f.write(f"Total conversations: {total_conversations}\n")
+        f.write(f"Conversations with mismatches: {mismatch_count}\n")
+        f.write(f"Mismatch rate: {mismatch_count/total_conversations*100:.1f}%\n")
+    print(f"Summary saved to {summary_path}")
     return pd.DataFrame(results)
 
 
@@ -533,6 +607,8 @@ def main():
                        help='Number of parallel tasks to run (default: 1)')
     parser.add_argument('--turn-threshold', type=int, default=12,
                        help='Minimum number of turns for progression analysis (default: 12)')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable debug logging')
     
     args = parser.parse_args()
     
@@ -549,7 +625,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Initialize PTC judge
-    judge = PTCClassifier(config)
+    judge = PTCClassifier(config, debug=args.debug)
     
     start_time = time.time()
     
@@ -573,8 +649,13 @@ def main():
                                         dataset=args.dataset, indices=indices)
         
         print("\nAnalyzing synthetic conversations...")
-        synthetic_df = analyze_conversations(judge, output_dir / 'synthetic', batch_size=args.batch_size,
-                                             data_dir=synthetic_dir)
+        synthetic_df = analyze_conversations(
+            judge,
+            output_dir / 'synthetic',
+            batch_size=args.batch_size,
+            data_dir=synthetic_dir,
+            session_files=session_files,
+        )
         
         print("\nComparing distributions...")
         compare_distributions(real_df, synthetic_df, output_dir, judge)
@@ -585,8 +666,19 @@ def main():
     elif args.synthetic_dir:
         # Analyze synthetic only
         print("Analyzing synthetic conversations...")
-        df = analyze_conversations(judge, output_dir, batch_size=args.batch_size,
-                                   data_dir=Path(args.synthetic_dir))    
+        synthetic_dir = Path(args.synthetic_dir)
+        # If N specified, pick the first N session files
+        selected_files = None
+        if args.N:
+            all_files = sorted(synthetic_dir.glob('session_*.json'))
+            selected_files = all_files[:args.N]
+        df = analyze_conversations(
+            judge,
+            output_dir,
+            batch_size=args.batch_size,
+            data_dir=synthetic_dir,
+            session_files=selected_files,
+        )
     else:
         print("Error: Please provide --real-dir and/or --synthetic-dir")
         return
