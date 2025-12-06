@@ -15,8 +15,8 @@ import pandas as pd
 import seaborn as sns
 from lexicalrichness import LexicalRichness
 
-from data_loader.main_loader import load_eeyore_dataset
-from data_loader.utils import merge_consecutive_messages
+from psibench.data_loader.main_loader import load_eeyore_dataset
+from psibench.data_loader.utils import merge_consecutive_messages
 
 # Common disfluencies to remove
 DISFLUENCIES = {
