@@ -44,6 +44,36 @@ from typing import List, Dict, Any
 import pandas as pd
 
 
+PATIENT_STYLE_DESCRIPTIONS = {
+    "upset": (
+        "An upset patient may 1) exhibit anger or resistance toward therapy, 2) challenge or dismiss the "
+        "therapist's suggestions, 3) struggle to trust the therapist, and 4) argue, criticize, or express "
+        "frustration during sessions."
+    ),
+    "verbose": (
+        "A verbose patient may 1) provide highly detailed responses, 2) elaborate extensively on personal "
+        "experiences, thoughts, and feelings, and 3) find it difficult to let the therapist guide the "
+        "conversation."
+    ),
+    "reserved": (
+        "A reserved patient may 1) answer briefly or evasively, 2) hesitate to share personal information "
+        "or feelings, 3) need extra prompting to open up, and 4) express distrust or skepticism toward the "
+        "therapist."
+    ),
+    "tangent": (
+        "A tangent-prone patient may 1) begin answering but quickly drift into unrelated topics, 2) share "
+        "anecdotes that are irrelevant to the question, 3) struggle to stay focused, and 4) require "
+        "redirection to return to the main points."
+    ),
+    "pleasing": (
+        "A pleasing patient may 1) downplay concerns to maintain a positive image, 2) act eager to please "
+        "and avoid disagreement, 3) seek approval or validation from the therapist, and 4) readily agree "
+        "with suggestions even if they are unsure."
+    ),
+    "plain": "",
+}
+
+
 def load_conversation(messages) -> str:
     """
     Format one full conversation (list of {role, content}) into Therapist/Client lines.
@@ -157,6 +187,12 @@ def format_patient_psi_prompt_from_ccd(
     emotion = cm.get("emotion", "")
     behavior = cm.get("behavior", "")
 
+    patient_style = (patient_type_content or "plain").strip()
+    style_description = PATIENT_STYLE_DESCRIPTIONS.get(patient_style.lower())
+    style_instruction = f"1. {patient_style}"
+    if style_description:
+        style_instruction += f"\n - {style_description}"
+
     prompt = (
         f"Imagine you are {name}, a patient who has been experiencing mental health challenges. "
         f"You have been attending therapy sessions for several weeks. Your task is to engage in a conversation with the therapist as {name} would during a cognitive behavioral therapy (CBT) session. "
@@ -176,7 +212,7 @@ def format_patient_psi_prompt_from_ccd(
         f"Emotions: {emotion}\n"
         f"Behavior: {behavior}\n\n"
         f"In the upcoming conversation, you will simulate {name} during the therapy session, while the user will play the role of the therapist. Adhere to the following guidelines:\n"
-        f"1. {patient_type_content}\n"
+        f"{style_instruction}\n"
         f"2. Emulate the demeanor and responses of a genuine patient to ensure authenticity in your interactions. "
         f"Use natural language, including hesitations, pauses, and emotional expressions, to enhance the realism of your responses.\n"
         f"3. Gradually reveal deeper concerns and core issues, as a real patient often requires extensive dialogue before delving into more sensitive topics. "
@@ -236,8 +272,19 @@ def generate_chain(data, config):
     attempts = 0
 
     while attempts < max_attempts:
-        _output = pydantic_parser.parse(
-            llm.invoke(_input).content).model_dump()
+        try:
+            response_content = llm.invoke(_input).content
+            _output = pydantic_parser.parse(response_content).model_dump()
+        except Exception as e:
+            attempts += 1
+            logger.warning(
+                f"Failed to parse CCD output. Attempt {attempts}/{max_attempts}: {e}"
+            )
+            if attempts == max_attempts:
+                raise ValueError(
+                    "Could not parse CCD output after maximum attempts"
+                ) from e
+            continue
         # print(_output)
 
         if is_json_serializable(_output):
