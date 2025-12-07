@@ -111,8 +111,16 @@ async def run_session(
     messages = []
     
     # Calculate number of patient turns from real messages
-    num_patient_turns = sum(1 for msg in real_messages if msg.get("role") in ["assistant", "patient"])
-    print(f"Matching conversation length: {num_patient_turns} patient turns")
+    real_num_patient_turns = sum(1 for msg in real_messages if msg.get("role") in ["assistant", "patient"])
+    
+    # Get max_turns from config and take minimum with real message length
+    max_turns = config.get("patient", {}).get("max_turns")
+    if max_turns is not None:
+        num_patient_turns = min(real_num_patient_turns, max_turns)
+        print(f"Limiting conversation length: {num_patient_turns} patient turns (real: {real_num_patient_turns}, max_turns: {max_turns})")
+    else:
+        num_patient_turns = real_num_patient_turns
+        print(f"Matching conversation length: {num_patient_turns} patient turns")
 
     if real_messages and real_messages[0]["role"] in ["assistant", "patient"]:
         messages.append({"role": "assistant", "content": ""})
