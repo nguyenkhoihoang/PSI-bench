@@ -6,16 +6,16 @@ from langchain.prompts import ChatPromptTemplate
 
 class CognitiveModel(BaseModel):
     situation: str = Field(
-        ...,
+        default="Unkown",
         description="The context or specific event that triggers a thought process or emotional response. Examples: `Thinking about bills`, `Thinking of asking son for help in revising resume`, `Memory of being criticized by boss`")
     automatic_thoughts: str = Field(
-        ...,
+        default="Unkown",
         description="These are spontaneous thoughts that occur in response to a situation, often without conscious control. Examples: `What if I run out of money?`, `I should be able to do this on my own.`, `I should have tried harder.`")
     emotion: str = Field(
-        ...,
+        default="Unkown",
         description="The feelings or emotions that arise in response to the automatic thoughts. You must pick at most three of the emotions in this set: `sad/down/lonely/unhappy`, `anxious/worried/fearful/scared/tense`, `angry/mad/irritated/annoyed`, `ashamed/humiliated/embarrassed`, `disappointed`, `jealous/envious`, `guilty`, `hurt`, `suspicious`.")
     behavior: str = Field(
-        ...,
+        default="Unkown",
         description="The actions or behaviors that result from the emotions and thoughts. Examples: `Continues to sit on couch; ruminates about his failures`, `Avoids asking son for help`, `Ruminates about what a failure he was`.")
 
 

@@ -17,7 +17,7 @@ from psibench.data_loader.main_loader import load_eeyore_dataset
 from psibench.agents.patient import PatientAgent
 from psibench.agents.therapist import TherapistAgent
 from psibench.models.eeyore import prepare_prompt_from_profile
-from psibench.models.patient_psi import generate_chain
+from psibench.models.patient_psi import generate_chain, generate_chain_batch
 
 
 def validate_patient_turns(messages: list, expected_num_patient_turns: int) -> bool:
@@ -37,17 +37,19 @@ def validate_patient_turns(messages: list, expected_num_patient_turns: int) -> b
     return actual_patient_turns == expected_num_patient_turns
 
 
-def session_exists_and_valid(output_path: Path) -> bool:
+def session_exists_and_valid(output_path: Path, check_ccd: bool = False) -> tuple:
     """Check if session file exists and passes validation.
     
     Args:
         output_path: Path to the session JSON file
+        check_ccd: If True, also check for CCD and return it
         
     Returns:
-        True if file exists and passes validation, False otherwise
+        If check_ccd=False: bool indicating if session is valid
+        If check_ccd=True: tuple (is_valid: bool, ccd: dict or None)
     """
     if not output_path.exists():
-        return False
+        return (False, None) if check_ccd else False
     
     try:
         with open(output_path, 'r', encoding='utf-8') as f:
@@ -57,11 +59,16 @@ def session_exists_and_valid(output_path: Path) -> bool:
         expected_turns = session_data.get('num_patient_turns')
         
         if expected_turns is None:
-            return False
+            return (False, None) if check_ccd else False
         
-        return validate_patient_turns(messages, expected_turns)
+        is_valid = validate_patient_turns(messages, expected_turns)
+        
+        if check_ccd:
+            ccd = session_data.get('ccd')
+            return (is_valid, ccd)
+        return is_valid
     except Exception:
-        return False
+        return (False, None) if check_ccd else False
 
 
 def parse_args():
@@ -189,20 +196,119 @@ async def main():
     print(f"Generating {len(df)} conversations from {args.dataset} dataset for PSI: {args.psi}")
     print(f"Batch size: {args.batch_size} parallel tasks")
 
+    # For patientpsi: process in batches (extract profiles per batch, then generate conversations)
+    if args.psi == "patientpsi":
+        # Prepare all data
+        all_data = []
+        for idx, row in df.iterrows():
+            try:
+                profile = json.loads(row["profile"])
+                real_messages = row["messages"]
+                all_data.append((idx, real_messages))
+            except Exception as e:
+                print(f"Error loading data for session {idx}: {e}")
+                continue
+        
+        skipped_count = 0
+        total_batches = (len(all_data) + args.batch_size - 1) // args.batch_size
+        
+        for batch_num, batch_start in enumerate(range(0, len(all_data), args.batch_size), 1):
+            batch_end = min(batch_start + args.batch_size, len(all_data))
+            batch_data = all_data[batch_start:batch_end]
+            
+            print(f"\n=== Processing batch {batch_num}/{total_batches} (sessions {batch_start}-{batch_end-1}) ===")
+            
+            # Filter out already-valid sessions and check for existing CCDs
+            indices_to_generate = []
+            real_messages_to_generate = []
+            batch_tasks = []
+            existing_ccds = {}  # idx -> ccd mapping
+            
+            for idx, real_messages in batch_data:
+                output_path = output_dir / f"session_{idx}.json"
+                is_valid, existing_ccd = session_exists_and_valid(output_path, check_ccd=True)
+                
+                if is_valid:
+                    print(f"Skipping session {idx} (already exists and passes validation)")
+                    skipped_count += 1
+                elif existing_ccd is not None:
+                    # Session exists with CCD but conversation incomplete - reuse CCD
+                    print(f"Reusing existing CCD for session {idx}")
+                    existing_ccds[idx] = existing_ccd
+                    batch_tasks.append((idx, real_messages))
+                else:
+                    # Need to generate CCD
+                    indices_to_generate.append(idx)
+                    real_messages_to_generate.append(real_messages)
+                    batch_tasks.append((idx, real_messages))
+            
+            if not batch_tasks:
+                print("All sessions in this batch already complete, skipping...")
+                continue
+            
+            # Generate profiles only for sessions without existing CCD
+            ccds_and_profiles = []
+            if real_messages_to_generate:
+                print(f"Generating {len(real_messages_to_generate)} profiles for this batch...")
+                ccds_and_profiles = generate_chain_batch(real_messages_to_generate, config)
+            
+            # Pair profiles with indices and messages
+            tasks_to_run = []
+            gen_idx = 0
+            for idx, real_messages in batch_tasks:
+                if idx in existing_ccds:
+                    # Use existing CCD
+                    ccd = existing_ccds[idx]
+                    from psibench.models.patient_psi import format_patient_psi_prompt_from_ccd
+                    profile = format_patient_psi_prompt_from_ccd(
+                        ccd=ccd,
+                        patient_type_content=config.get('patient').get('conversation_type'),
+                        name="Patient"
+                    )
+                    tasks_to_run.append((idx, profile, real_messages, ccd))
+                else:
+                    # Use newly generated CCD
+                    ccd, profile = ccds_and_profiles[gen_idx]
+                    gen_idx += 1
+                    if profile is None:
+                        print(f"Error generating profile for session {idx}: batch call returned None")
+                        continue
+                    tasks_to_run.append((idx, profile, real_messages, ccd))
+            
+            if not tasks_to_run:
+                continue
+            
+            # Generate conversations for this batch
+            print(f"Generating {len(tasks_to_run)} conversations in parallel...")
+            batch_coroutines = [
+                run_session(profile, real_messages, config=config)
+                for idx, profile, real_messages, ccd in tasks_to_run
+            ]
+            
+            results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
+            
+            # Save results with CCD
+            for (idx, _, _, ccd), result in zip(tasks_to_run, results):
+                if isinstance(result, Exception):
+                    print(f"\nError in session {idx}: {result}")
+                else:
+                    # Add CCD to result
+                    result['ccd'] = ccd
+                    save_session_results(result, output_dir, idx)
+        
+        print(f"\nFinished! Session transcripts saved to {output_dir}/")
+        print(f"Skipped {skipped_count} sessions (already valid)")
+        return
+    
+    # Original logic for eeyore and roleplaydoh
     all_tasks = []
-    # Prepare all profiles and tasks first
     for idx, row in df.iterrows():
         try:
             profile = json.loads(row["profile"])
             real_messages = row["messages"]
             if args.psi == "eeyore":
                 system_prompt, _, _ = await prepare_prompt_from_profile(profile)
-                profile["system_prompt"] = system_prompt
-
-            elif args.psi == "patientpsi":
-                # generate_chain returns the patientpsi prompt which includes system prompt for patient Agent
-                system_prompt = generate_chain(real_messages, config)
-                profile["system_prompt"] = system_prompt
+                profile["eeyore_system_prompt"] = system_prompt
 
             all_tasks.append((idx, profile, real_messages))
 
@@ -220,7 +326,7 @@ async def main():
         tasks_to_run = []
         for idx, profile, real_messages in batch:
             output_path = output_dir / f"session_{idx}.json"
-            if session_exists_and_valid(output_path):
+            if session_exists_and_valid(output_path, check_ccd=False):
                 print(f"Skipping session {idx} (already exists and passes validation)")
                 skipped_count += 1
             else:
