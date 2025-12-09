@@ -2,11 +2,13 @@
 
 Usage - automatically extracts PSI and dataset from folder path:
 
-python -m psibench.eval.compare_conversation_lengths \
---folder /work/hdd/bfjp/data/synthetic/test/eeyore/hosted_vllm_openai_gpt-oss-120b/hope
+python -m psibench.eval.compare_conversation_lengths --all \
+  --data-folder /work/hdd/bfjp/data/synthetic/test/ \
+  --model hosted_vllm_openai_gpt-oss-120b
+  
 
 python -m psibench.eval.compare_conversation_lengths \
---folder /work/hdd/bfjp/data/synthetic/test/eeyore/hosted_vllm_openai_gpt-oss-120b/esc
+--folder /work/hdd/bfjp/data/synthetic/test/patientpsi/hosted_vllm_openai_gpt-oss-120b/hope
 
 python -m psibench.eval.compare_conversation_lengths \
 --folder /work/hdd/bfjp/data/synthetic/test/roleplaydoh/hosted_vllm_openai_gpt-oss-120b/annomi
@@ -268,14 +270,154 @@ def plot_word_count_comparison(synthetic_df: pd.DataFrame, real_df: pd.DataFrame
     print(f"✓ Line graph saved to: {output_path / filename}")
     plt.close()
 
+def compare_all_datasets(config_path: str, output_dir: str, data_folder: str = 'data/synthetic', model: str = None):
+    """Compare all datasets concatenated, with multiple PSI simulators.
+    
+    Args:
+        config_path: Path to config file
+        output_dir: Output directory for results
+        data_folder: Path to synthetic data folder (default: data/synthetic)
+        model: Model name to filter by (e.g., gpt-4.1-mini). If None, uses first match.
+    """
+    print(f"\n{'='*70}")
+    print(f"Comparing All Datasets (Concatenated) - Multiple PSI Simulators")
+    print(f"{'='*70}\n")
+    
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    max_turns = config.get('patient').get('max_turns')
+    
+    # Load real data - concatenate all datasets
+    print("Loading real conversations from all datasets...")
+    all_real_convs = []
+    for dataset in ['esc', 'hope', 'annomi']:
+        try:
+            df = load_eeyore_dataset(dataset)
+            for _, row in df.iterrows():
+                all_real_convs.append({'messages': row['messages']})
+            print(f"  ✓ Loaded {len(df)} conversations from {dataset} dataset")
+        except Exception as e:
+            print(f"  ⚠ Error loading {dataset}: {e}")
+    
+    print(f"Total real conversations: {len(all_real_convs)}\n")
+    
+    # Calculate real data statistics
+    real_by_turn = extract_patient_messages_by_turn(all_real_convs, max_turns)
+    real_df = calculate_average_lengths(real_by_turn)
+    print(f"Real data: {len(real_df)} turns analyzed\n")
+    
+    # Load synthetic data for each PSI simulator
+    synthetic_data = {}
+    data_folder_path = Path(data_folder)
+    psi_types = ['patientpsi', 'roleplaydoh']
+    
+    for psi in psi_types:
+        print(f"Loading synthetic conversations for {psi}...")
+        all_synth_convs = []
+        
+        for dataset in ['esc', 'hope', 'annomi']:
+            # Try to find the folder with this PSI and dataset
+            # Handle both: data_folder/psi/model/dataset and data_folder/*/psi/model/dataset
+            if model:
+                # Try exact pattern first: psi/model/dataset
+                psi_folders = list(data_folder_path.glob(f'{psi}/{model}/{dataset}'))
+                # If not found, try with wildcard: */psi/model/dataset
+                if not psi_folders:
+                    psi_folders = list(data_folder_path.glob(f'*/{psi}/{model}/{dataset}'))
+            else:
+                # Try exact pattern first: psi/*/dataset
+                psi_folders = list(data_folder_path.glob(f'{psi}/*/{dataset}'))
+                # If not found, try with wildcard: */psi/*/dataset
+                if not psi_folders:
+                    psi_folders = list(data_folder_path.glob(f'*/{psi}/*/{dataset}'))
+            
+            if psi_folders:
+                # Use the first matching folder
+                synth_folder = psi_folders[0]
+                try:
+                    synth_df_raw = load_synthetic_data_to_df(str(synth_folder))
+                    synth_convs = synth_df_raw.to_dict('records')
+                    all_synth_convs.extend(synth_convs)
+                    print(f"  ✓ Loaded {len(synth_convs)} conversations from {dataset} dataset ({synth_folder.parent.name})")
+                except Exception as e:
+                    print(f"  ⚠ Error loading {dataset} for {psi}: {e}")
+            else:
+                print(f"  ⚠ No folder found for {psi}/{dataset}")
+        
+        if all_synth_convs:
+            synth_by_turn = extract_patient_messages_by_turn(all_synth_convs, max_turns)
+            synth_df = calculate_average_lengths(synth_by_turn)
+            synthetic_data[psi] = synth_df
+            print(f"  Total {psi}: {len(all_synth_convs)} conversations, {len(synth_df)} turns analyzed\n")
+        else:
+            print(f"  ⚠ No synthetic data found for {psi}\n")
+    
+    # Create combined visualization
+    output_path = Path(output_dir)
+    plot_multiple_psi_comparison(real_df, synthetic_data, output_path)
+
+
+def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str, pd.DataFrame], output_path: Path):
+    """Create a line graph comparing multiple PSI simulators against real data.
+    
+    Args:
+        real_df: DataFrame with real data statistics
+        synthetic_data: Dictionary mapping PSI name -> DataFrame with synthetic statistics
+        output_path: Path to save the plot
+    """
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # Plot real data (solid line)
+    ax.plot(real_df['turn'], real_df['avg_words'], 
+            linewidth=2.5, label='Real', alpha=0.8, linestyle='-')
+    
+    # Plot synthetic data for each PSI simulator (orange color, different line styles)
+    linestyles = ['--', ':']  # Dashed, Dotted
+    for idx, (psi, synth_df) in enumerate(synthetic_data.items()):
+        ax.plot(synth_df['turn'], synth_df['avg_words'], 
+                linewidth=2.5, label=psi.capitalize(), alpha=0.8, color='orange', linestyle=linestyles[idx])
+    
+    # Formatting
+    ax.set_xlabel('Turn Index', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Average Word Count', fontsize=12, fontweight='bold')
+    ax.set_title(f'Patient Message Length Comparison (All Datasets): Multiple PSI Simulators vs Real', 
+                 fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='best')
+    ax.grid(True, alpha=0.3)
+    
+    # Ensure x-axis shows integer values only
+    all_turns = []
+    all_turns.extend(real_df['turn'].tolist())
+    for synth_df in synthetic_data.values():
+        all_turns.extend(synth_df['turn'].tolist())
+    
+    if all_turns:
+        max_turn = int(max(all_turns)) + 1
+        ax.set_xticks(range(max_turn))
+    
+    plt.tight_layout()
+    filename = 'all_datasets_multiple_psi.png'
+    plt.savefig(output_path / filename, dpi=300, bbox_inches='tight')
+    print(f"✓ Multi-PSI comparison graph saved to: {output_path / filename}")
+    plt.close()
+
+
 
 def main():
     """Main function to run conversation length comparison."""
     parser = argparse.ArgumentParser(
         description='Compare conversation lengths between synthetic and real datasets'
     )
-    parser.add_argument('--folder', type=str, required=True,
-                       help='Path to folder containing synthetic conversations (session_*.json files)')
+    parser.add_argument('--folder', type=str, default=None,
+                       help='Path to folder containing synthetic conversations (session_*.json files). Required if --all is not used.')
+    parser.add_argument('--all', action='store_true',
+                       help='Compare all datasets and PSI simulators together (patientpsi and roleplaydoh with real)')
+    parser.add_argument('--data-folder', type=str, default='data/synthetic',
+                       help='Path to synthetic data folder (default: data/synthetic). Used with --all flag.')
+    parser.add_argument('--model', type=str, default=None,
+                       help='Model name to filter by (e.g., gpt-4.1-mini, hosted_vllm_openai_gpt-oss-120b). If not specified, uses first match.')
     parser.add_argument('--config', type=str, default='configs/default.yaml',
                        help='Path to config file (default: configs/default.yaml)')
     parser.add_argument('--output-dir', type=str, default='output/length_comparison',
@@ -283,26 +425,31 @@ def main():
     
     args = parser.parse_args()
     
-    # Extract PSI and dataset from folder path
-    synthetic_folder = Path(args.folder)
-    psi_type, dataset_type = extract_psi_and_dataset_from_path(synthetic_folder)
-    print(f"Extracted from path - PSI: {psi_type}, Dataset: {dataset_type}\n")
-    
-    with open(args.config, "r") as f:
-        config = yaml.safe_load(f)
-    max_turns = config.get('patient').get('max_turns')
-    
-    # Run comparison
-    output_path = Path(args.output_dir)
-    
-    synthetic_df, real_df, comparison_df, dataset_type = compare_datasets(
-        synthetic_folder=synthetic_folder,
-        dataset_type=dataset_type,
-        max_turns= max_turns
-    )
-    
-    # Create visualization
-    plot_word_count_comparison(synthetic_df, real_df, output_path, dataset_type, psi_type)
+    if args.all:
+        compare_all_datasets(args.config, args.output_dir, args.data_folder, args.model)
+    elif args.folder:
+        # Original single-folder comparison
+        synthetic_folder = Path(args.folder)
+        psi_type, dataset_type = extract_psi_and_dataset_from_path(synthetic_folder)
+        print(f"Extracted from path - PSI: {psi_type}, Dataset: {dataset_type}\n")
+        
+        with open(args.config, "r") as f:
+            config = yaml.safe_load(f)
+        max_turns = config.get('patient').get('max_turns')
+        
+        # Run comparison
+        output_path = Path(args.output_dir)
+        
+        synthetic_df, real_df, comparison_df, dataset_type = compare_datasets(
+            synthetic_folder=synthetic_folder,
+            dataset_type=dataset_type,
+            max_turns=max_turns
+        )
+        
+        # Create visualization
+        plot_word_count_comparison(synthetic_df, real_df, output_path, dataset_type, psi_type)
+    else:
+        parser.error("Either --folder or --all must be specified")
 
 
 if __name__ == '__main__':
