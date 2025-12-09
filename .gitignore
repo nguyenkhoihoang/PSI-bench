@@ -55,4 +55,5 @@ Thumbs.db
 output/
 results/
 data/synthetic/*
-test/*
+test/*logs/
+run_patientpsi_jobs.sh
