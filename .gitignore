@@ -16,6 +16,7 @@ parts/
 sdist/
 var/
 wheels/
+wandb/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -54,4 +55,5 @@ Thumbs.db
 output/
 results/
 data/synthetic/*
-test/*
+test/*logs/
+run_patientpsi_jobs.sh

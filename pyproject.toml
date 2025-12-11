@@ -29,5 +29,8 @@ dependencies = [
     "bert_score>=0.3.13",
     "nltk>=3.8.1",
     "langchain-core==0.3.79",
-    "tabulate"
+    "tabulate",
+    "seaborn",
+    "json-repair",
+    "lexicalrichness"
 ]
