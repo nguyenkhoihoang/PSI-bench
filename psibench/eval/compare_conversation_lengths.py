@@ -369,14 +369,19 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
     
     fig, ax = plt.subplots(figsize=(14, 7))
     
+    # Filter data to only show first 12 turns (0-11)
+    max_display_turns = 12
+    real_df_filtered = real_df[real_df['turn'] < max_display_turns]
+    
     # Plot real data (solid line)
-    ax.plot(real_df['turn'], real_df['avg_words'], 
+    ax.plot(real_df_filtered['turn'], real_df_filtered['avg_words'], 
             linewidth=2.5, label='Real', alpha=0.8, linestyle='-')
     
     # Plot synthetic data for each PSI simulator (orange color, different line styles)
     linestyles = ['--', ':']  # Dashed, Dotted
     for idx, (psi, synth_df) in enumerate(synthetic_data.items()):
-        ax.plot(synth_df['turn'], synth_df['avg_words'], 
+        synth_df_filtered = synth_df[synth_df['turn'] < max_display_turns]
+        ax.plot(synth_df_filtered['turn'], synth_df_filtered['avg_words'], 
                 linewidth=2.5, label=psi.capitalize(), alpha=0.8, color='orange', linestyle=linestyles[idx])
     
     # Formatting
@@ -394,7 +399,7 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
         all_turns.extend(synth_df['turn'].tolist())
     
     if all_turns:
-        max_turn = int(max(all_turns)) + 1
+        max_turn = min(int(max(all_turns)) + 1, 12)
         ax.set_xticks(range(max_turn))
     
     plt.tight_layout()

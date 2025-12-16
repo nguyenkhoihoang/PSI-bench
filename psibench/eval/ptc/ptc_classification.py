@@ -203,6 +203,168 @@ class PTCClassifier:
         
         return results
 
+    def classify_turns_batch(self, conversations: List[List[Dict[str, str]]], num_messages: int = 6) -> List[List[Dict[str, Any]]]:
+        """Batch classify individual patient turns with limited history context.
+        
+        Args:
+            conversations: List of conversations, each being a list of messages
+            num_messages: Number of previous messages to include as history (default: 6)
+            
+        Returns:
+            List of classification results for each conversation, where each result is a list of 
+            {"content": str, "classification": str, "turn_index": int} for each patient turn
+        """
+        from psibench.prompts.judge_prompt import create_ptc_judge_single_turn_prompt
+        
+        # Get the prompt template
+        single_turn_prompt = create_ptc_judge_single_turn_prompt()
+        
+        # Build all classification tasks across all conversations
+        all_messages = []
+        task_metadata = []  # Track which conversation and turn each task belongs to
+        
+        for conv_idx, messages in enumerate(conversations):
+            # Find all patient turns (role == 'assistant')
+            patient_indices = [i for i, msg in enumerate(messages) 
+                             if msg.get('role') == 'assistant' and msg.get('content', '').strip()]
+            
+            for patient_idx in patient_indices:
+                # Get history: up to num_messages before this patient turn
+                history_start = max(0, patient_idx - num_messages)
+                history_messages = messages[history_start:patient_idx]
+                history_str = self._format_history(history_messages) if history_messages else "(No previous history)"
+                
+                # Current patient message
+                current_message = messages[patient_idx]['content']
+                
+                # Format prompt
+                formatted_prompt = single_turn_prompt.format_messages(
+                    history=history_str,
+                    current_message=current_message
+                )
+                
+                # Convert to litellm format
+                litellm_messages = []
+                for i, msg in enumerate(formatted_prompt):
+                    if hasattr(msg, 'type'):
+                        role = msg.type
+                        if role == 'human':
+                            role = 'user'
+                        elif role not in ['system', 'assistant', 'user', 'function', 'tool', 'developer']:
+                            role = 'system' if i == 0 else 'user'
+                    else:
+                        role = 'system' if i == 0 else 'user'
+                    
+                    litellm_messages.append({
+                        "role": role,
+                        "content": msg.content
+                    })
+                
+                all_messages.append(litellm_messages)
+                task_metadata.append({
+                    'conv_idx': conv_idx,
+                    'turn_idx': patient_idx,
+                    'content': current_message
+                })
+        
+        if self.debug:
+            print(f"Prepared {len(all_messages)} single-turn classification tasks across {len(conversations)} conversations")
+            # Log first few request structures for debugging
+            for task_idx in range(min(2, len(all_messages))):
+                print(f"\n--- Sample request {task_idx} ---")
+                print(f"Number of messages: {len(all_messages[task_idx])}")
+                for msg_idx, msg in enumerate(all_messages[task_idx]):
+                    content_preview = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
+                    print(f"  Message {msg_idx} (role={msg['role']}): {content_preview}")
+        
+        # Batch completion call
+        try:
+            if self.debug:
+                print(f"\n--- Sending batch completion request ---")
+                print(f"Model: {self.model_name}")
+                print(f"Temperature: {self.temperature}")
+                print(f"API base: {self.api_base}")
+            
+            responses = batch_completion(
+                model=self.model_name,
+                messages=all_messages,
+                temperature=self.temperature,
+                api_key=self.api_key,
+                api_base=self.api_base,
+            )
+            
+            if self.debug:
+                print(f"Batch completion succeeded. Received {len(responses)} responses")
+        except Exception as e:
+            print(f"Error in batch_completion call: {e}")
+            print(f"Error type: {type(e).__name__}")
+            import traceback
+            print(f"Traceback:\n{traceback.format_exc()}")
+            return [[] for _ in conversations]
+        
+        # Parse responses and organize by conversation
+        conversation_results = [[] for _ in conversations]
+        
+        for i, (response, metadata) in enumerate(zip(responses, task_metadata)):
+            try:
+                # Extract response text
+                if isinstance(response, str):
+                    response_text = response.strip()
+                elif hasattr(response, 'choices') and len(getattr(response, 'choices', [])) > 0:
+                    content = response.choices[0].message.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Task {i}: choices[0].message.content is None; skipping")
+                        continue
+                    else:
+                        response_text = content.strip()
+                elif hasattr(response, 'message') and hasattr(response.message, 'content'):
+                    content = response.message.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Task {i}: message.content is None; skipping")
+                        continue
+                    else:
+                        response_text = content.strip()
+                elif hasattr(response, 'content'):
+                    content = response.content
+                    if content is None:
+                        if self.debug:
+                            print(f"Task {i}: content is None; skipping")
+                        continue
+                    else:
+                        response_text = content.strip()
+                else:
+                    raise ValueError(f"Unexpected response format: {type(response)}")
+                
+                # Parse classification (should be single letter)
+                if 'response_text' in locals():
+                    classification = response_text.upper().strip()
+                    # Extract just the classification letter if there's extra text
+                    for letter in ['P', 'T', 'C', 'F']:
+                        if letter in classification:
+                            classification = letter
+                            break
+                    else:
+                        if self.debug:
+                            print(f"Task {i}: Could not find valid classification in '{response_text}'; skipping")
+                        continue
+                
+                # Add to appropriate conversation's results
+                conv_idx = metadata['conv_idx']
+                conversation_results[conv_idx].append({
+                    'content': metadata['content'],
+                    'classification': classification,
+                    'turn_index': metadata['turn_idx']
+                })
+                
+            except Exception as e:
+                if self.debug:
+                    print(f"Error parsing task {i} response: {e}; skipping")
+                continue
+        
+        return conversation_results
+
 
 def analyze_conversations(
     judge: PTCClassifier,
@@ -212,6 +374,9 @@ def analyze_conversations(
     indices: List[int] = None,
     data_dir: Path = None,
     session_files: List[Path] = None,
+    single_turn: bool = False,
+    num_messages: int = 6,
+    exact_turns: int = None,
 ) -> pd.DataFrame:
     """Analyze conversations from either real dataset or synthetic files.
     
@@ -222,6 +387,9 @@ def analyze_conversations(
         dataset: Dataset type for real conversations (e.g., 'esc', 'hope'). If provided, loads from eeyore dataset.
         indices: List of conversation indices (required if dataset is provided)
         data_dir: Directory containing synthetic conversation JSON files (alternative to dataset/indices)
+        single_turn: If True, use single-turn classification with limited history (default: False)
+        num_messages: Number of previous messages to include as history for single-turn mode (default: 6)
+        exact_turns: If specified, only include conversations with exactly this many patient turns (default: None)
         
     Returns:
         DataFrame with analysis results
@@ -235,30 +403,46 @@ def analyze_conversations(
     if dataset is not None and indices is not None:
         # Load from real dataset
         eeyore_df = load_eeyore_dataset(dataset_type=dataset, indices=indices)
-        print(f"Analyzing {len(eeyore_df)} real conversations from {dataset} dataset")
+        print(f"Loaded {len(eeyore_df)} real conversations from {dataset} dataset")
         
         for idx, row in eeyore_df.iterrows():
-            all_conversations.append(row["messages"])
+            messages = row["messages"]
+            # Filter by exact patient turn count if specified
+            if exact_turns is not None:
+                patient_turn_count = sum(1 for msg in messages 
+                                       if msg.get('role') == 'assistant' and msg.get('content', '').strip())
+                if patient_turn_count != exact_turns:
+                    continue
+            all_conversations.append(messages)
             conversation_ids.append(('real', idx))
+        
+        print(f"Analyzing {len(all_conversations)} conversations (filtered to {exact_turns} patient turns)" if exact_turns else f"Analyzing {len(all_conversations)} conversations")
             
     elif data_dir is not None:
         # Load from synthetic files
         # If a specific list of session_files is provided, use that; otherwise glob from data_dir
         if session_files is None:
             session_files = sorted(data_dir.glob('session_*.json'))
-        print(f"Analyzing {len(session_files)} conversations from {data_dir}")
+        print(f"Loaded {len(session_files)} conversations from {data_dir}")
         
         for session_file in session_files:
             try:
                 with open(session_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                # debug
-                # print(f"Loaded conversation from {session_file} with {len(data.get('messages', []))} messages")
-                all_conversations.append(data.get('messages', []))
+                messages = data.get('messages', [])
+                # Filter by exact patient turn count if specified
+                if exact_turns is not None:
+                    patient_turn_count = sum(1 for msg in messages 
+                                           if msg.get('role') == 'assistant' and msg.get('content', '').strip())
+                    if patient_turn_count != exact_turns:
+                        continue
+                all_conversations.append(messages)
                 conversation_ids.append(('synthetic', session_file))
             except Exception as e:
                 print(f"Error loading {session_file}: {e}")
                 continue
+        
+        print(f"Analyzing {len(all_conversations)} conversations (filtered to {exact_turns} patient turns)" if exact_turns else f"Analyzing {len(all_conversations)} conversations")
     else:
         raise ValueError("Must provide either (dataset and indices) or data_dir")
     
@@ -271,7 +455,10 @@ def analyze_conversations(
         batch_ids = conversation_ids[batch_start:batch_end]
         
         try:
-            classifications_list = judge.classify_conversations_batch(batch_conversations)
+            if single_turn:
+                classifications_list = judge.classify_turns_batch(batch_conversations, num_messages=num_messages)
+            else:
+                classifications_list = judge.classify_conversations_batch(batch_conversations)
             
             # Process results
             for conv_id, classifications, messages in zip(batch_ids, classifications_list, batch_conversations):
@@ -607,6 +794,12 @@ def main():
                        help='Number of parallel tasks to run (default: 1)')
     parser.add_argument('--turn-threshold', type=int, default=12,
                        help='Minimum number of turns for progression analysis (default: 12)')
+    parser.add_argument('--exact-turns', type=int, default=None,
+                       help='Only analyze conversations with exactly this many patient turns (default: None, analyze all)')
+    parser.add_argument('--single-turn', action='store_true',
+                       help='Use single-turn classification with limited history instead of full conversation')
+    parser.add_argument('--num-messages', type=int, default=6,
+                       help='Number of previous messages to include as history for single-turn mode (default: 6)')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug logging')
     
@@ -644,9 +837,16 @@ def main():
         
         print(f"Found {len(indices)} conversations to analyze")
         print(f"Batch size: {args.batch_size}")
+        print(f"Classification mode: {'Single-turn' if args.single_turn else 'Full conversation'}")
+        if args.single_turn:
+            print(f"History window: {args.num_messages} messages")
+        if args.exact_turns:
+            print(f"Filtering to conversations with exactly {args.exact_turns} patient turns")
         print(f"Analyzing corresponding real conversations from {args.dataset} dataset...")
         real_df = analyze_conversations(judge, output_dir / 'real', batch_size=args.batch_size, 
-                                        dataset=args.dataset, indices=indices)
+                                        dataset=args.dataset, indices=indices,
+                                        single_turn=args.single_turn, num_messages=args.num_messages,
+                                        exact_turns=args.exact_turns)
         
         print("\nAnalyzing synthetic conversations...")
         synthetic_df = analyze_conversations(
@@ -655,6 +855,9 @@ def main():
             batch_size=args.batch_size,
             data_dir=synthetic_dir,
             session_files=session_files,
+            single_turn=args.single_turn,
+            num_messages=args.num_messages,
+            exact_turns=args.exact_turns,
         )
         
         print("\nComparing distributions...")
@@ -666,6 +869,11 @@ def main():
     elif args.synthetic_dir:
         # Analyze synthetic only
         print("Analyzing synthetic conversations...")
+        print(f"Classification mode: {'Single-turn' if args.single_turn else 'Full conversation'}")
+        if args.single_turn:
+            print(f"History window: {args.num_messages} messages")
+        if args.exact_turns:
+            print(f"Filtering to conversations with exactly {args.exact_turns} patient turns")
         synthetic_dir = Path(args.synthetic_dir)
         # If N specified, pick the first N session files
         selected_files = None
@@ -678,6 +886,9 @@ def main():
             batch_size=args.batch_size,
             data_dir=synthetic_dir,
             session_files=selected_files,
+            single_turn=args.single_turn,
+            num_messages=args.num_messages,
+            exact_turns=args.exact_turns,
         )
     else:
         print("Error: Please provide --real-dir and/or --synthetic-dir")

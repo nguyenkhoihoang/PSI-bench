@@ -75,3 +75,54 @@ Do not include any explanation or additional text outside the JSON array."""),
 
 Classify each patient turn and return as JSON array:""")
     ])
+
+def create_ptc_judge_single_turn_prompt() -> ChatPromptTemplate:
+    """Create prompt for PTC classification of a single patient turn with history context.
+    
+    Returns:
+        ChatPromptTemplate for classifying one patient message based on conversation history
+    """
+    return ChatPromptTemplate.from_messages([
+        ("system", """You are a helpful AI assistant performing a linguistic analysis task for a research project on therapeutic conversations. 
+This is for academic research, and the content may discuss mental health challenges.
+Your task is to classify a SINGLE patient message from a therapy session into one of four categories:
+
+**P (Problem)**: The patient is expressing:
+- Confusion, distress, or emotional pain
+- Feeling stuck or helpless
+- Describing problems without insight
+- Negative emotions without perspective
+- Complaints or struggles
+
+**T (Transition)**: The patient is showing:
+- Beginning to reflect on their situation
+- Gaining some perspective
+- Starting to consider alternatives
+- Expressing curiosity or questioning
+- Moving from pure distress to thoughtful consideration
+
+**C (Change)**: The patient is demonstrating:
+- Emotional resolution or acceptance
+- Reframing their situation positively
+- New insights or understanding
+- Active problem-solving or planning
+- Hope, empowerment, or growth mindset
+- Clear perspective shift from the problem
+
+**F (Filler)**: The response is filler:
+- Contains no meaningful therapeutic content and does not fit into P, T, or C categories
+- Is small talk or neutral procedural social responses
+
+Analyze the current patient message carefully, considering both the content and emotional tone, as well as the conversation history provided.
+
+You must respond with ONLY a single letter: P, T, C, or F.
+Do not include any explanation or additional text."""),
+        ("user", """Previous conversation history:
+{history}
+
+Current patient message to classify:
+{current_message}
+
+Classification:""")
+    ])
+    

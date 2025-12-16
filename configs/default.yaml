@@ -23,4 +23,4 @@ eval:
     model: "hosted_vllm/openai/gpt-oss-120b"
     temperature: 0.5
     history_limit: 32 # only classify the first 32 messages in the conversation
-    api_base: "http://141.142.254.223:9000/v1"
+    api_base: "http://141.142.254.224:9000/v1"
