@@ -51,3 +51,15 @@ python -m psibench.eval.read_compare_convo --dataset annomi 39
 <!-- (Later: haven't checked since delta GPU been down lately)
 Run eval comparison on delta (may need to edit your account in sbatch script) 
 bash eval_sim.sl -->
+### 4. using Emotional compare
+
+First
+```
+pip install emoatlas
+pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
+```
+
+then execute 
+```
+bash run_emotional_compare_all.sh
+```
