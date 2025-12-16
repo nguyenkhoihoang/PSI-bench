@@ -33,6 +33,7 @@ except ImportError:
 def prepare_emotion_data(text_list, ea):
     """Calculates z-scores for each turn and returns a DataFrame."""
     timeline_data = []
+    # eight basic emotions in emoatlas
     base_emotions = ["anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust"]
 
     for i, text in enumerate(text_list):
@@ -152,6 +153,7 @@ def _plot_radar(emotions, values, label, color, output_dir: Path, filename: str,
     width = 2 * np.pi / num_vars * 0.85 
 
     fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+    # 95% Significance Threshold Line
     THRESHOLD_Z = 1.96
 
     # Grey Significance Disk
@@ -204,6 +206,7 @@ def plot_global_intensity_comparison(real_scores_dict, syn_scores_dict, output_d
     ax.set_xticklabels(emotions, rotation=0, fontweight='bold')
     ax.legend()
     ax.grid(axis='y', linestyle='--', alpha=0.5)
+    # Significance Line
     ax.axhline(y=1.96, color='gray', linestyle=':', alpha=0.7, label='Sig. Threshold (1.96)')
 
     _save_or_show(fig, output_dir, "global_intensity_bar_comparison.png", show_plots)
