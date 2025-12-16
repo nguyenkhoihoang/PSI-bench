@@ -97,7 +97,7 @@ def get_scores(text_list, ea):
         return ea.zscores(full_text)
         
     # If too large, split into chunks and average the results
-    # print(f"   [INFO] Text size {len(full_text)} exceeds limit. Processing in chunks...")
+    print(f"   [INFO] Text size {len(full_text)} exceeds limit. Processing in chunks...")
     chunks = []
     current_chunk = []
     current_len = 0
@@ -182,7 +182,7 @@ def _plot_radar(emotions, values, label, color, output_dir: Path, filename: str,
     ax.grid(False)
     ax.spines['polar'].set_visible(False)
     
-    ax.set_title(f"{label}\n(Petal=|Z|; Grey Area=Insignificant)", pad=30, fontsize=13, fontweight="bold")
+    # ax.set_title(f"{label}\n(Petal=|Z|; Grey Area=Insignificant)", pad=30, fontsize=13, fontweight="bold")
     _save_or_show(fig, output_dir, filename, show_plots)
 
 
@@ -199,7 +199,7 @@ def plot_global_intensity_comparison(real_scores_dict, syn_scores_dict, output_d
     ax.bar(x + width/2, syn_means, width, label='Synthetic', color='#ff7f0e', alpha=0.9)
 
     ax.set_ylabel('Average Z-Score Intensity')
-    ax.set_title('Global Emotion Intensity Comparison (All Sessions)', fontweight='bold')
+    # ax.set_title('Global Emotion Intensity Comparison (All Sessions)', fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(emotions, rotation=0, fontweight='bold')
     ax.legend()
@@ -250,7 +250,7 @@ def plot_eight_emotion_timelines(real_turns_dict, syn_turns_dict, output_dir, sh
         ax.plot(turns, real_mean, marker='o', markersize=4, linewidth=2, label='Real (Avg)', color='#1f77b4')
         ax.plot(turns, syn_mean, marker='s', markersize=4, linewidth=2, linestyle='--', label='Synthetic (Avg)', color='#ff7f0e')
         
-        ax.set_title(f"Fluctuation of '{emotion.upper()}' (First {limit} Turns)", fontweight='bold')
+        # ax.set_title(f"Fluctuation of '{emotion.upper()}' (First {limit} Turns)", fontweight='bold')
         ax.set_xlabel("Conversation Turn")
         ax.set_ylabel("Z-Score Intensity")
         
