@@ -640,13 +640,14 @@ def get_turn_classifications(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame, 
-                           output_dir: Path, turn_threshold: int = 12):
+                           output_dir: Path, turn_threshold: int = 12, exact_turns: int = None):
     """Create visualizations comparing PTC distributions.
     
     Args:
         real_df: DataFrame with real conversation analysis
         synthetic_df: DataFrame with synthetic conversation analysis
         output_dir: Directory to save plots
+        exact_turns: If provided, label plots to reflect exact patient-turn filtering
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -710,7 +711,8 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     axes[1].legend(loc='upper right')
     axes[1].grid(axis='y', alpha=0.3)
     
-    plt.suptitle('Average PTCF Distribution', fontsize=16, fontweight='bold', y=0.98)
+    subtitle_suffix = f" (exactly {exact_turns} patient turns)" if exact_turns else ""
+    plt.suptitle(f'Average PTCF Distribution{subtitle_suffix}', fontsize=16, fontweight='bold', y=0.98)
     plt.tight_layout()
     plt.savefig(output_dir / 'ptc_stacked_average.png', dpi=300, bbox_inches='tight')
     plt.close()
@@ -720,7 +722,10 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     real_df_filtered = real_df[real_df['total_patient_turns'] >= turn_threshold].copy()
     synthetic_df_filtered = synthetic_df[synthetic_df['total_patient_turns'] >= turn_threshold].copy()
     
-    print(f"\nFiltered to {len(real_df_filtered)} real and {len(synthetic_df_filtered)} synthetic conversations with ≥turn_threshold turns")
+    if exact_turns:
+        print(f"\nFiltered to {len(real_df_filtered)} real and {len(synthetic_df_filtered)} synthetic conversations with exactly {exact_turns} patient turns")
+    else:
+        print(f"\nFiltered to {len(real_df_filtered)} real and {len(synthetic_df_filtered)} synthetic conversations with ≥turn_threshold turns")
     
     # Get turn-by-turn data
     real_turns = get_turn_classifications(real_df_filtered)
@@ -749,8 +754,11 @@ def visualize_distributions(real_df: pd.DataFrame, synthetic_df: pd.DataFrame,
     
     ax.set_xlabel('Turn Index', fontsize=12)
     ax.set_ylabel('PTC Classification', fontsize=12)
-    ax.set_title(f'Average PTC Progression (First {turn_threshold} Turns, Conversations with ≥{turn_threshold} Turns)', 
-                fontsize=14, fontweight='bold')
+    if exact_turns:
+        title_text = f'Average PTC Progression (First {turn_threshold} Turns, Conversations with exactly {exact_turns} patient turns)'
+    else:
+        title_text = f'Average PTC Progression (First {turn_threshold} Turns, Conversations with ≥{turn_threshold} Turns)'
+    ax.set_title(title_text, fontsize=14, fontweight='bold')
     ax.set_yticks([1, 2, 3])
     ax.set_yticklabels(['Problem (P)', 'Transition (T)', 'Change (C)'])
     ax.set_ylim([0.5, 3.5])
@@ -864,7 +872,7 @@ def main():
         compare_distributions(real_df, synthetic_df, output_dir, judge)
         
         print("\nGenerating visualizations...")
-        visualize_distributions(real_df, synthetic_df, output_dir, turn_threshold=args.turn_threshold)
+        visualize_distributions(real_df, synthetic_df, output_dir, turn_threshold=args.turn_threshold, exact_turns=args.exact_turns)
         
     elif args.synthetic_dir:
         # Analyze synthetic only
