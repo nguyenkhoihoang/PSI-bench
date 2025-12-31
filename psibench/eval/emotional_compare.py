@@ -1,4 +1,7 @@
-"""Compare real and synthetic conversations side by side (Text & Emotions)."""
+"""Compare real and synthetic conversations side by side (Text & Emotions).
+Should download: 
+python -m spacy download en_core_web_lg
+"""
 
 import json
 import os
