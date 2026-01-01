@@ -1,4 +1,7 @@
 import litellm
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 messages = [
     {"role": "system", "content": "You are a helpful assistant."},
@@ -6,9 +9,10 @@ messages = [
 ]
 
 response = litellm.completion(
-            model="hosted_vllm/Qwen/Qwen3-30B-A3B-Instruct-2507", # pass the vllm model name
+            model="gpt-4.1-mini",
             messages=messages,
-            api_base="http://141.142.254.227:9000/v1",
+            api_key=os.environ["OPENAI_API_KEY"],
+            api_base=os.environ["OPENAI_BASE_URL"],
             temperature=0.9,
             max_tokens=2000)
 
@@ -16,5 +20,3 @@ content = response.choices[0].message.content
 
 print("RESPONSE:")
 print(content)
-
-

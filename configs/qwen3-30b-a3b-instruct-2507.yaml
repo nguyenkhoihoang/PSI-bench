@@ -1,0 +1,16 @@
+# Patient model
+patient:
+  simulator: "roleplaydoh"
+  model: "hosted_vllm/Qwen/Qwen3-30B-A3B-Instruct-2507"
+  temperature: 0.7
+  max_tokens: 1000
+  max_attempts: 5
+  conversation_type: "plain"
+  api_base: "http://141.142.254.227:9000/v1"
+  max_turns: 20
+  
+# Therapist model
+therapist:
+  model: "gpt-4.1-mini"
+  temperature: 0.5
+  max_tokens: 1000

@@ -19,6 +19,26 @@ def load_eeyore_from_hf(dataset_type: Literal["ESC","HOPE", "AnnoMI"], indices: 
     
     return df[df['source'] == dataset_type]
 
+def load_all_real(indices: list = None):
+    """Load all real datasets from the Eeyore dataset (ESC, HOPE, AnnoMI).
+    
+    Args:
+        indices: Optional list of specific indices to load
+        
+    Returns:
+        DataFrame containing all real conversation data
+    """
+    data = load_dataset("liusiyang/eeyore_profile", split='train', token=os.getenv("HF_TOKEN"))
+    df = data.to_pandas()
+    df['messages'] = df['messages'].apply(merge_consecutive_messages)
+    
+    if indices:
+        # Directly get rows with matching indices
+        matched_df = df.loc[indices].copy()
+        return matched_df[matched_df['source'].isin(["ESC", "HOPE", "AnnoMI"])].copy()
+    
+    return df[df['source'].isin(["ESC", "HOPE", "AnnoMI"])]
+
 def load_eeyore_dataset(dataset_type: str, indices: list = None):
     """Load dataset based on type and optional indices.
     

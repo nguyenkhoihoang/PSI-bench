@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any, Dict
+import traceback
 
 import yaml
 from dotenv import load_dotenv
@@ -134,7 +135,11 @@ async def run_session(
         num_patient_turns -= 1  # Reduce count since we're adding initial assistant message
     try:
         # Start conversation with therapist
-        therapist_msg = therapist.respond(messages)
+        try:
+            therapist_msg = therapist.respond(messages)
+        except Exception as e:
+            print(f"Error generating initial therapist message: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
         messages.append({"role": "user", "content": therapist_msg})
 
         # Main conversation loop - generate same number of turns as real conversation
@@ -148,6 +153,8 @@ async def run_session(
 
     except Exception as e:
         print(f"Session ended early due to error: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Full traceback:\n{traceback.format_exc()}")
 
     # Validate num_patient_turns matches actual non-empty assistant messages
     if not validate_patient_turns(messages, num_patient_turns):
@@ -291,6 +298,8 @@ async def main():
             for (idx, _, _, ccd), result in zip(tasks_to_run, results):
                 if isinstance(result, Exception):
                     print(f"\nError in session {idx}: {result}")
+                    print(f"Error type: {type(result).__name__}")
+                    print(f"Full traceback:\n{''.join(traceback.format_exception(type(result), result, result.__traceback__))}")
                 else:
                     # Add CCD to result
                     result['ccd'] = ccd
