@@ -1,5 +1,11 @@
 """Compare conversation lengths between synthetic and real datasets.
 
+From HF synthetic dataset:
+
+python -m psibench.eval.compare_conversation_lengths --hf \
+  --config configs/default.yaml \
+  --output-dir output/length_comparison
+
 Usage - automatically extracts PSI and dataset from folder path:
 
 python -m psibench.eval.compare_conversation_lengths --all \
@@ -16,16 +22,23 @@ python -m psibench.eval.compare_conversation_lengths \
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 import yaml
 import pandas as pd
 import numpy as np
-from collections import defaultdict
 import matplotlib.pyplot as plt
+from psibench.eval.utils import extract_patient_messages_by_turn
 
-from psibench.data_loader.main_loader import load_eeyore_dataset, load_synthetic_data_to_df
-
+from psibench.data_loader.main_loader import (
+    load_eeyore_dataset,
+    load_synthetic_data_to_df,
+    load_synthetic_hf_to_df,
+)
+from datasets import load_dataset
+from dotenv import load_dotenv
+load_dotenv()
 
 def extract_psi_and_dataset_from_path(folder_path: Path) -> Tuple[str, str]:
     """Extract PSI type and dataset from folder path.
@@ -76,34 +89,6 @@ def count_words(text: str) -> int:
 def count_tokens_approx(text: str) -> int:
     """Approximate token count (roughly 1 token = 4 characters)."""
     return len(text) // 4
-
-
-def extract_patient_messages_by_turn(conversations: List[Dict], max_turns: int = None) -> Dict[int, List[str]]:
-    """Extract patient messages organized by turn index.
-    
-    Args:
-        conversations: List of conversation dictionaries
-        max_turns: Maximum turn to analyze (None = analyze all)
-        
-    Returns:
-        Dictionary mapping turn_index -> list of patient messages at that turn
-    """
-    messages_by_turn = defaultdict(list)
-    
-    for conv in conversations:
-        messages = conv.get('messages', [])
-        patient_turn_idx = 0
-        
-        for msg in messages:
-            # Patient messages have role 'assistant'
-            if msg.get('role') == 'assistant':
-                content = msg.get('content', '').strip()
-                if content:  # Only count non-empty messages
-                    if max_turns is None or patient_turn_idx < max_turns:
-                        messages_by_turn[patient_turn_idx].append(content)
-                    patient_turn_idx += 1
-    
-    return messages_by_turn
 
 
 def calculate_average_lengths(messages_by_turn: Dict[int, List[str]]) -> pd.DataFrame:
@@ -184,50 +169,12 @@ def compare_datasets(synthetic_folder: Path, dataset_type: str, max_turns: int =
     real_convs = load_real_conversations(dataset_type)
     print(f"Found {len(real_convs)} real conversations")
     
-    # Check if counts match
-    if len(synthetic_convs) != len(real_convs):
-        print(f"\n⚠️  WARNING: Conversation counts do not match!")
-        print(f"   Synthetic: {len(synthetic_convs)}, Real: {len(real_convs)}")
-    else:
-        print(f"\n✓ Conversation counts match: {len(synthetic_convs)}")
-    
-    # Extract patient messages by turn
-    print(f"\nAnalyzing patient messages by turn (max_turns: {max_turns or 'all'})...")
-    synthetic_by_turn = extract_patient_messages_by_turn(synthetic_convs, max_turns)
-    real_by_turn = extract_patient_messages_by_turn(real_convs, max_turns)
-    
-    # Calculate average lengths
-    synthetic_df = calculate_average_lengths(synthetic_by_turn)
-    real_df = calculate_average_lengths(real_by_turn)
-    
-    # Create comparison DataFrame
-    comparison_data = []
-    all_turns = sorted(set(synthetic_df['turn'].tolist() + real_df['turn'].tolist()))
-    
-    for turn in all_turns:
-        synth_row = synthetic_df[synthetic_df['turn'] == turn]
-        real_row = real_df[real_df['turn'] == turn]
-        
-        synth_words = synth_row['avg_words'].values[0] if not synth_row.empty else np.nan
-        real_words = real_row['avg_words'].values[0] if not real_row.empty else np.nan
-        synth_tokens = synth_row['avg_tokens'].values[0] if not synth_row.empty else np.nan
-        real_tokens = real_row['avg_tokens'].values[0] if not real_row.empty else np.nan
-        synth_count = synth_row['count'].values[0] if not synth_row.empty else 0
-        real_count = real_row['count'].values[0] if not real_row.empty else 0
-        
-        comparison_data.append({
-            'turn': turn,
-            'synthetic_count': synth_count,
-            'real_count': real_count,
-            'synthetic_avg_words': synth_words,
-            'real_avg_words': real_words,
-            'words_diff': synth_words - real_words if not np.isnan(synth_words) and not np.isnan(real_words) else np.nan,
-            'synthetic_avg_tokens': synth_tokens,
-            'real_avg_tokens': real_tokens,
-            'tokens_diff': synth_tokens - real_tokens if not np.isnan(synth_tokens) and not np.isnan(real_tokens) else np.nan,
-        })
-    
-    comparison_df = pd.DataFrame(comparison_data)
+    synthetic_df, real_df, comparison_df = compare_conversation_sets(
+        synthetic_convs=synthetic_convs,
+        real_convs=real_convs,
+        dataset_type=dataset_type,
+        max_turns=max_turns,
+    )
     
     return synthetic_df, real_df, comparison_df, dataset_type
 
@@ -269,6 +216,53 @@ def plot_word_count_comparison(synthetic_df: pd.DataFrame, real_df: pd.DataFrame
     plt.savefig(output_path / filename, dpi=300, bbox_inches='tight')
     print(f"✓ Line graph saved to: {output_path / filename}")
     plt.close()
+
+
+def compare_conversation_sets(synthetic_convs: List[Dict], real_convs: List[Dict], dataset_type: str, max_turns: int = None):
+    """Shared comparison pipeline between synthetic and real conversations."""
+
+    if len(synthetic_convs) != len(real_convs):
+        print(f"\n⚠️  WARNING: Conversation counts do not match!")
+        print(f"   Synthetic: {len(synthetic_convs)}, Real: {len(real_convs)}")
+    else:
+        print(f"\n✓ Conversation counts match: {len(synthetic_convs)}")
+
+    print(f"\nAnalyzing patient messages by turn (max_turns: {max_turns or 'all'})...")
+    synthetic_by_turn = extract_patient_messages_by_turn(synthetic_convs, max_turns)
+    real_by_turn = extract_patient_messages_by_turn(real_convs, max_turns)
+
+    synthetic_df = calculate_average_lengths(synthetic_by_turn)
+    real_df = calculate_average_lengths(real_by_turn)
+
+    comparison_data = []
+    all_turns = sorted(set(synthetic_df['turn'].tolist() + real_df['turn'].tolist()))
+
+    for turn in all_turns:
+        synth_row = synthetic_df[synthetic_df['turn'] == turn]
+        real_row = real_df[real_df['turn'] == turn]
+
+        synth_words = synth_row['avg_words'].values[0] if not synth_row.empty else np.nan
+        real_words = real_row['avg_words'].values[0] if not real_row.empty else np.nan
+        synth_tokens = synth_row['avg_tokens'].values[0] if not synth_row.empty else np.nan
+        real_tokens = real_row['avg_tokens'].values[0] if not real_row.empty else np.nan
+        synth_count = synth_row['count'].values[0] if not synth_row.empty else 0
+        real_count = real_row['count'].values[0] if not real_row.empty else 0
+
+        comparison_data.append({
+            'turn': turn,
+            'synthetic_count': synth_count,
+            'real_count': real_count,
+            'synthetic_avg_words': synth_words,
+            'real_avg_words': real_words,
+            'words_diff': synth_words - real_words if not np.isnan(synth_words) and not np.isnan(real_words) else np.nan,
+            'synthetic_avg_tokens': synth_tokens,
+            'real_avg_tokens': real_tokens,
+            'tokens_diff': synth_tokens - real_tokens if not np.isnan(synth_tokens) and not np.isnan(real_tokens) else np.nan,
+        })
+
+    comparison_df = pd.DataFrame(comparison_data)
+
+    return synthetic_df, real_df, comparison_df
 
 def compare_all_datasets(config_path: str, output_dir: str, data_folder: str = 'data/synthetic', model: str = None):
     """Compare all datasets concatenated, with multiple PSI simulators.
@@ -357,12 +351,99 @@ def compare_all_datasets(config_path: str, output_dir: str, data_folder: str = '
     plot_multiple_psi_comparison(real_df, synthetic_data, output_path)
 
 
+def _safe_dir_name(name: str) -> str:
+    return name.replace('/', '_')
+
+
+def get_hf_combinations() -> List[Dict[str, str]]:
+    """Return unique (psi, backend_llm, dataset) combos from HF dataset (train split)."""
+    hf_token = os.getenv("HF_TOKEN")
+    dataset = load_dataset("hknguyen20/psibench-synthetic", split="train", token=hf_token)
+    df = dataset.to_pandas()
+    combos = df[["psi", "backend_llm", "dataset"]].dropna().drop_duplicates()
+    return combos.to_dict("records")
+
+
+def compare_all_hf_pairs(config_path: str, output_dir: str):
+    """Compare all available HF psi/backend pairs against all real datasets combined (train split)."""
+
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    max_turns = config.get('patient').get('max_turns')
+
+    combos = get_hf_combinations()
+    if not combos:
+        print("[WARNING] No combinations found in HF dataset.")
+        return
+
+    output_root = Path(output_dir)
+
+    # Load all real data once (combined esc, hope, annomi)
+    print("Loading all real conversations (esc, hope, annomi combined)...")
+    all_real_convs = []
+    for dataset in ['esc', 'hope', 'annomi']:
+        try:
+            real_convs = load_real_conversations(dataset)
+            all_real_convs.extend(real_convs)
+            print(f"  ✓ Loaded {len(real_convs)} from {dataset}")
+        except Exception as e:
+            print(f"  ⚠ Error loading {dataset}: {e}")
+    
+    print(f"Total real conversations: {len(all_real_convs)}")
+    real_by_turn = extract_patient_messages_by_turn(all_real_convs, max_turns)
+    real_df = calculate_average_lengths(real_by_turn)
+    print(f"Real data: {len(real_df)} turns analyzed\n")
+
+    # Get unique (psi, backend_llm) pairs
+    unique_pairs = set()
+    for combo in combos:
+        psi = combo.get("psi")
+        backend = combo.get("backend_llm")
+        if psi and backend:
+            unique_pairs.add((psi, backend))
+
+    print(f"Found {len(unique_pairs)} unique (psi, backend_llm) pairs\n")
+
+    # Load all synthetic data
+    synthetic_data = {}
+    
+    for psi, backend_llm in sorted(unique_pairs):
+        label = f"{psi}-{_safe_dir_name(backend_llm)}"
+        print(f"Loading {label}...")
+        
+        # Load all data for this psi/backend pair
+        synthetic_df_all = load_synthetic_hf_to_df(
+            psi=psi,
+            backend_llm=backend_llm,
+        )
+
+        if synthetic_df_all.empty:
+            print(f"  ⚠ No synthetic rows for {psi}/{backend_llm}")
+            continue
+
+        # Combine all datasets for this PSI/backend combination
+        synthetic_convs = synthetic_df_all.to_dict('records')
+        print(f"  ✓ Loaded {len(synthetic_convs)} conversations (all datasets)")
+        
+        # Calculate statistics
+        synth_by_turn = extract_patient_messages_by_turn(synthetic_convs, max_turns)
+        synth_df = calculate_average_lengths(synth_by_turn)
+        synthetic_data[label] = synth_df
+        print(f"  ✓ {len(synth_df)} turns analyzed")
+
+    if synthetic_data:
+        out_dir = output_root / "hf"
+        plot_multiple_psi_comparison(real_df, synthetic_data, out_dir)
+    else:
+        print(f"  ⚠ No synthetic data found")
+
+
 def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str, pd.DataFrame], output_path: Path):
     """Create a line graph comparing multiple PSI simulators against real data.
     
     Args:
         real_df: DataFrame with real data statistics
-        synthetic_data: Dictionary mapping PSI name -> DataFrame with synthetic statistics
+        synthetic_data: Dictionary mapping variant name (psi-backend) -> DataFrame with synthetic statistics
         output_path: Path to save the plot
     """
     output_path.mkdir(parents=True, exist_ok=True)
@@ -373,23 +454,23 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
     max_display_turns = 12
     real_df_filtered = real_df[real_df['turn'] < max_display_turns]
     
-    # Plot real data (solid line)
+    # Plot real data (solid line, thicker)
     ax.plot(real_df_filtered['turn'], real_df_filtered['avg_words'], 
-            linewidth=2.5, label='Real', alpha=0.8, linestyle='-')
+            linewidth=3, label='Real', alpha=0.9, linestyle='-', color='black')
     
-    # Plot synthetic data for each PSI simulator (orange color, different line styles)
-    linestyles = ['--', ':']  # Dashed, Dotted
-    for idx, (psi, synth_df) in enumerate(synthetic_data.items()):
+    # Plot synthetic data for each variant
+    colors = plt.cm.tab10(range(len(synthetic_data)))
+    for idx, (variant_name, synth_df) in enumerate(sorted(synthetic_data.items())):
         synth_df_filtered = synth_df[synth_df['turn'] < max_display_turns]
         ax.plot(synth_df_filtered['turn'], synth_df_filtered['avg_words'], 
-                linewidth=2.5, label=psi.capitalize(), alpha=0.8, color='orange', linestyle=linestyles[idx])
+                linewidth=2, label=variant_name, alpha=0.8, color=colors[idx])
     
     # Formatting
     ax.set_xlabel('Turn Index', fontsize=12, fontweight='bold')
     ax.set_ylabel('Average Word Count', fontsize=12, fontweight='bold')
-    ax.set_title(f'Patient Message Length Comparison (All Datasets): Multiple PSI Simulators vs Real', 
+    ax.set_title(f'Patient Message Length Comparison: All PSI Variants vs Real', 
                  fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11, loc='best')
+    ax.legend(fontsize=9, loc='best')
     ax.grid(True, alpha=0.3)
     
     # Ensure x-axis shows integer values only
@@ -403,9 +484,9 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
         ax.set_xticks(range(max_turn))
     
     plt.tight_layout()
-    filename = 'all_datasets_multiple_psi.png'
+    filename = 'all_psi_variants_comparison.png'
     plt.savefig(output_path / filename, dpi=300, bbox_inches='tight')
-    print(f"✓ Multi-PSI comparison graph saved to: {output_path / filename}")
+    print(f"\n✓ Multi-variant comparison graph saved to: {output_path / filename}")
     plt.close()
 
 
@@ -427,10 +508,17 @@ def main():
                        help='Path to config file (default: configs/default.yaml)')
     parser.add_argument('--output-dir', type=str, default='output/length_comparison',
                        help='Output directory for results (default: output/length_comparison)')
+    parser.add_argument('--hf', action='store_true',
+                       help='Load all psi/backend pairs from HF dataset hknguyen20/psibench-synthetic (train split, HF_TOKEN env var)')
     
     args = parser.parse_args()
     
-    if args.all:
+    if args.hf:
+        compare_all_hf_pairs(
+            config_path=args.config,
+            output_dir=args.output_dir,
+        )
+    elif args.all:
         compare_all_datasets(args.config, args.output_dir, args.data_folder, args.model)
     elif args.folder:
         # Original single-folder comparison
@@ -454,7 +542,7 @@ def main():
         # Create visualization
         plot_word_count_comparison(synthetic_df, real_df, output_path, dataset_type, psi_type)
     else:
-        parser.error("Either --folder or --all must be specified")
+        parser.error("Either --folder, --all, or --hf must be specified")
 
 
 if __name__ == '__main__':

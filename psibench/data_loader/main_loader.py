@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import Literal, Optional
 from datasets import load_dataset
 from psibench.data_loader.utils import merge_consecutive_messages
 import pandas as pd
@@ -89,3 +89,51 @@ def load_synthetic_data_to_df(data_dir: str):
         return pd.DataFrame()
     
     return pd.DataFrame(sessions)
+
+
+def _safe_json_load(value):
+    """Parse JSON strings back to Python objects when possible."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+    return value
+
+
+def load_synthetic_hf_to_df(psi: str, backend_llm: str, split: str = "train", token: Optional[str] = None):
+    """Load PSI-bench synthetic data from HuggingFace and filter by simulator and backend.
+
+    Args:
+        psi: Name of the PSI simulator (e.g., "patientpsi" or "roleplaydoh").
+        backend_llm: Backend LLM identifier (e.g., "hosted_vllm_openai_gpt-oss-120b").
+        split: HF split to load (default: "train").
+        token: Optional HF token; falls back to HF_TOKEN env var.
+
+    Returns:
+        Pandas DataFrame filtered to the requested psi and backend_llm.
+    """
+
+    hf_token = token or os.getenv("HF_TOKEN")
+    dataset = load_dataset("hknguyen20/psibench-synthetic", split=split, token=hf_token)
+    df = dataset.to_pandas()
+
+    # Filter by psi and backend (case-insensitive)
+    filtered = df[
+        df["psi"].str.lower() == psi.lower()
+    ]
+    filtered = filtered[
+        filtered["backend_llm"].str.lower() == backend_llm.lower()
+    ].copy()
+
+    if filtered.empty:
+        print(f"[WARNING] No rows found for psi='{psi}' and backend_llm='{backend_llm}'")
+        return filtered
+
+    # Convert JSON-like strings back to Python objects for convenience
+    for col in ("messages", "profile", "ccd"):
+        if col in filtered.columns:
+            filtered[col] = filtered[col].apply(_safe_json_load)
+
+    return filtered
+
