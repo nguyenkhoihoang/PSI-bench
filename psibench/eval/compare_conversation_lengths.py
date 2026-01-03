@@ -8,6 +8,7 @@ python -m psibench.eval.compare_conversation_lengths --hf \
 
 Usage - automatically extracts PSI and dataset from folder path:
 
+(archived)
 python -m psibench.eval.compare_conversation_lengths --all \
   --data-folder /work/hdd/bfjp/data/synthetic/test/ \
   --model hosted_vllm_openai_gpt-oss-120b
@@ -29,7 +30,7 @@ import yaml
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from psibench.eval.utils import extract_patient_messages_by_turn
+from psibench.eval.utils import extract_patient_messages_by_turn, safe_dir_name, get_all_psi_backend_pairs
 
 from psibench.data_loader.main_loader import (
     load_eeyore_dataset,
@@ -351,30 +352,12 @@ def compare_all_datasets(config_path: str, output_dir: str, data_folder: str = '
     plot_multiple_psi_comparison(real_df, synthetic_data, output_path)
 
 
-def _safe_dir_name(name: str) -> str:
-    return name.replace('/', '_')
-
-
-def get_hf_combinations() -> List[Dict[str, str]]:
-    """Return unique (psi, backend_llm, dataset) combos from HF dataset (train split)."""
-    hf_token = os.getenv("HF_TOKEN")
-    dataset = load_dataset("hknguyen20/psibench-synthetic", split="train", token=hf_token)
-    df = dataset.to_pandas()
-    combos = df[["psi", "backend_llm", "dataset"]].dropna().drop_duplicates()
-    return combos.to_dict("records")
-
-
 def compare_all_hf_pairs(config_path: str, output_dir: str):
     """Compare all available HF psi/backend pairs against all real datasets combined (train split)."""
 
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     max_turns = config.get('patient').get('max_turns')
-
-    combos = get_hf_combinations()
-    if not combos:
-        print("[WARNING] No combinations found in HF dataset.")
-        return
 
     output_root = Path(output_dir)
 
@@ -394,21 +377,16 @@ def compare_all_hf_pairs(config_path: str, output_dir: str):
     real_df = calculate_average_lengths(real_by_turn)
     print(f"Real data: {len(real_df)} turns analyzed\n")
 
-    # Get unique (psi, backend_llm) pairs
-    unique_pairs = set()
-    for combo in combos:
-        psi = combo.get("psi")
-        backend = combo.get("backend_llm")
-        if psi and backend:
-            unique_pairs.add((psi, backend))
-
-    print(f"Found {len(unique_pairs)} unique (psi, backend_llm) pairs\n")
+    # Get all unique (psi, backend_llm) pairs
+    print("Loading all unique PSI-backend pairs...")
+    all_pairs = get_all_psi_backend_pairs()
+    print(f"Found {len(all_pairs)} unique (psi, backend_llm) pairs\n")
 
     # Load all synthetic data
     synthetic_data = {}
     
-    for psi, backend_llm in sorted(unique_pairs):
-        label = f"{psi}-{_safe_dir_name(backend_llm)}"
+    for psi, backend_llm in sorted(all_pairs):
+        label = f"{psi}-{safe_dir_name(backend_llm)}"
         print(f"Loading {label}...")
         
         # Load all data for this psi/backend pair

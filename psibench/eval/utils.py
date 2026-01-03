@@ -1,5 +1,7 @@
+import os
 from collections import defaultdict
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
+from datasets import load_dataset
 
 def extract_patient_messages_by_turn(conversations: List[Dict], max_turns: int = None) -> Dict[int, List[str]]:
     """Extract patient messages organized by turn index.
@@ -27,3 +29,27 @@ def extract_patient_messages_by_turn(conversations: List[Dict], max_turns: int =
                     patient_turn_idx += 1
     
     return messages_by_turn
+
+def get_all_psi_backend_pairs(token: Optional[str] = None) -> List[Tuple[str, str]]:
+    """Get all unique PSI-backend LLM pairs from HuggingFace dataset.
+    
+    Args:
+        token: Optional HuggingFace token
+        
+    Returns:
+        List of (psi, backend_llm) tuples
+    """
+    hf_token = token or os.getenv("HF_TOKEN")
+    dataset = load_dataset("hknguyen20/psibench-synthetic", split="train", token=hf_token)
+    df = dataset.to_pandas()
+    
+    # Get unique pairs
+    unique_pairs = df[['psi', 'backend_llm']].drop_duplicates()
+    pairs = [(row['psi'], row['backend_llm']) for _, row in unique_pairs.iterrows()]
+    
+    return sorted(pairs)
+
+
+def safe_dir_name(name: str) -> str:
+    """Convert a string to a safe directory/label name."""
+    return name.replace('/', '_').replace(':', '_').replace(' ', '_')
