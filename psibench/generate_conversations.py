@@ -212,7 +212,8 @@ async def main():
                 profile = json.loads(row["profile"])
                 real_messages = row["messages"]
                 source = row.get("source")
-                all_data.append((idx, real_messages, source))
+                original_profile = profile  # keep the real conversation profile for saving
+                all_data.append((idx, real_messages, source, original_profile))
             except Exception as e:
                 print(f"Error loading data for session {idx}: {e}")
                 continue
@@ -232,7 +233,7 @@ async def main():
             batch_tasks = []
             existing_ccds = {}  # idx -> ccd mapping
             
-            for idx, real_messages, source in batch_data:
+            for idx, real_messages, source, original_profile in batch_data:
                 output_path = output_dir / f"session_{idx}.json"
                 is_valid, existing_ccd = session_exists_and_valid(output_path, check_ccd=True)
                 
@@ -243,12 +244,12 @@ async def main():
                     # Session exists with CCD but conversation incomplete - reuse CCD
                     print(f"Reusing existing CCD for session {idx}")
                     existing_ccds[idx] = existing_ccd
-                    batch_tasks.append((idx, real_messages, source))
+                    batch_tasks.append((idx, real_messages, source, original_profile))
                 else:
                     # Need to generate CCD
                     indices_to_generate.append(idx)
                     real_messages_to_generate.append(real_messages)
-                    batch_tasks.append((idx, real_messages, source))
+                    batch_tasks.append((idx, real_messages, source, original_profile))
             
             if not batch_tasks:
                 print("All sessions in this batch already complete, skipping...")
@@ -263,7 +264,7 @@ async def main():
             # Pair profiles with indices and messages
             tasks_to_run = []
             gen_idx = 0
-            for idx, real_messages, source in batch_tasks:
+            for idx, real_messages, source, original_profile in batch_tasks:
                 if idx in existing_ccds:
                     # Use existing CCD
                     ccd = existing_ccds[idx]
@@ -273,7 +274,7 @@ async def main():
                         patient_type_content=config.get('patient').get('conversation_type'),
                         name="Patient"
                     )
-                    tasks_to_run.append((idx, profile, real_messages, ccd, source))
+                    tasks_to_run.append((idx, profile, real_messages, ccd, source, original_profile))
                 else:
                     # Use newly generated CCD
                     ccd, profile = ccds_and_profiles[gen_idx]
@@ -281,7 +282,7 @@ async def main():
                     if profile is None:
                         print(f"Error generating profile for session {idx}: batch call returned None")
                         continue
-                    tasks_to_run.append((idx, profile, real_messages, ccd, source))
+                    tasks_to_run.append((idx, profile, real_messages, ccd, source, original_profile))
             
             if not tasks_to_run:
                 continue
@@ -290,21 +291,22 @@ async def main():
             print(f"Generating {len(tasks_to_run)} conversations in parallel...")
             batch_coroutines = [
                 run_session(profile, real_messages, config=config)
-                for idx, profile, real_messages, ccd, _ in tasks_to_run
+                for idx, profile, real_messages, ccd, _, _ in tasks_to_run
             ]
             
             results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
             
             # Save results with CCD
-            for (idx, _, _, ccd, source), result in zip(tasks_to_run, results):
+            for (idx, _, _, ccd, source, original_profile), result in zip(tasks_to_run, results):
                 if isinstance(result, Exception):
                     print(f"\nError in session {idx}: {result}")
                     print(f"Error type: {type(result).__name__}")
                     print(f"Full traceback:\n{''.join(traceback.format_exception(type(result), result, result.__traceback__))}")
                 else:
-                    # Add CCD to result
+                    # Save original profile and keep CCD for patientpsi outputs
+                    result['profile'] = original_profile
                     result['ccd'] = ccd
-                    result['source'] = source
+                    result['source'] = source.lower()
                     save_session_results(result, output_dir, idx)
         
         print(f"\nFinished! Session transcripts saved to {output_dir}/")
@@ -360,7 +362,7 @@ async def main():
             if isinstance(result, Exception):
                 print(f"\nError in session {idx}: {result}")
             else:
-                result['source'] = source
+                result['source'] = source.lower()
                 save_session_results(result, output_dir, idx)
 
     print(f"\nFinished! Session transcripts saved to {output_dir}/")

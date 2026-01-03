@@ -15,7 +15,7 @@
 MODEL_NAME="Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 # export HF_HOME=/work/hdd/bfjp/huggingface
 
 if [ -f "psibench/.env" ]; then
@@ -58,9 +58,9 @@ echo "Public endpoint: $(curl -s ifconfig.me):$VLLM_SERVER_PORT" >> $LOG_PATH
 
 vllm serve $MODEL_NAME \
     --tensor-parallel-size $GPU_NUM \
-    --max-num-seqs 50 \
+    --max-num-seqs 32 \
     --async-scheduling \
     --port $VLLM_SERVER_PORT \
     --max-model-len 20000 \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization 0.9 \
     >> $LOG_PATH 2>&1

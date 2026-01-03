@@ -103,13 +103,15 @@ class PSIBenchSynthetic(datasets.GeneratorBasedBuilder):
                     for session_file in sorted(dataset_dir.glob('session_*.json')):
                         with open(session_file) as f:
                             data = json.load(f)
+                            # Prefer explicit source field if present
+                            dataset_value = data.get("source", dataset_name)
                             yield idx, {
                                 "session_id": data.get("session_id", idx),
                                 "messages": data.get("messages", []),
                                 "profile": data.get("profile", ""),
                                 "psi": psi_name,
                                 "backend_llm": backend_name,
-                                "dataset": dataset_name,
+                                "dataset": dataset_value,
                                 "num_patient_turns": data.get("num_patient_turns", 0),
                                 "ccd": data.get("ccd", {}),
                             }
@@ -215,20 +217,21 @@ def load_all_data_to_dataframe(data_dir: Path) -> pd.DataFrame:
                                 if isinstance(value, (dict, list)):
                                     # ensure_ascii=False keeps unicode readable (no \uXXXX escaping)
                                     session_data[key] = json.dumps(value, ensure_ascii=False, indent=2)
-                            
-                            # Special handling for patientpsi: use ccd as profile
+
+                            # CCD handling: save only for patientpsi, empty for others
                             if psi_name.lower() == 'patientpsi':
-                                if 'ccd' in session_data:
-                                    # For patientpsi, rename ccd to profile
-                                    session_data['profile'] = session_data.pop('ccd')
-                                # Remove any other profile field if it exists
-                                if 'profile_old' in session_data:
-                                    del session_data['profile_old']
-                            
+                                # Ensure CCD present for patientpsi (fallback to profile if missing)
+                                if 'ccd' not in session_data and 'profile' in session_data:
+                                    session_data['ccd'] = session_data['profile']
+
+                            else:
+                                # For non-patientpsi, clear CCD
+                                session_data['ccd'] = json.dumps({}, ensure_ascii=False)
+
                             # Add metadata
                             session_data['psi'] = psi_name
                             session_data['backend_llm'] = backend_name
-                            session_data['dataset'] = dataset_name
+                            session_data['dataset'] = session_data.get('source', dataset_name)
                             all_sessions.append(session_data)
                     except Exception as e:
                         print(f"[WARNING] Failed to load {session_file}: {e}")
