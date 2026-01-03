@@ -16,7 +16,7 @@ MODEL_NAME="Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
 export CUDA_VISIBLE_DEVICES=0
-export HF_HOME=/work/hdd/bfjp/huggingface
+# export HF_HOME=/work/hdd/bfjp/huggingface
 
 if [ -f "psibench/.env" ]; then
     echo "Loading environment from psibench/.env"

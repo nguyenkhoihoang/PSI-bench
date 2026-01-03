@@ -78,7 +78,7 @@ def parse_args():
         description="Generate simulated counseling conversations"
     )
     parser.add_argument(
-        "--dataset", type=str, default="esc", help="Dataset type (default: esc)"
+        "--dataset", type=str, default="esc", help="Dataset type: esc | hope | annomi | all (default: esc)"
     )
     parser.add_argument("--output-dir", type=str, default="data/synthetic", help="Output directory")
     parser.add_argument("--psi", type=str, default="eeyore", help="Type of patient sim to use")
@@ -211,7 +211,8 @@ async def main():
             try:
                 profile = json.loads(row["profile"])
                 real_messages = row["messages"]
-                all_data.append((idx, real_messages))
+                source = row.get("source")
+                all_data.append((idx, real_messages, source))
             except Exception as e:
                 print(f"Error loading data for session {idx}: {e}")
                 continue
@@ -231,7 +232,7 @@ async def main():
             batch_tasks = []
             existing_ccds = {}  # idx -> ccd mapping
             
-            for idx, real_messages in batch_data:
+            for idx, real_messages, source in batch_data:
                 output_path = output_dir / f"session_{idx}.json"
                 is_valid, existing_ccd = session_exists_and_valid(output_path, check_ccd=True)
                 
@@ -242,12 +243,12 @@ async def main():
                     # Session exists with CCD but conversation incomplete - reuse CCD
                     print(f"Reusing existing CCD for session {idx}")
                     existing_ccds[idx] = existing_ccd
-                    batch_tasks.append((idx, real_messages))
+                    batch_tasks.append((idx, real_messages, source))
                 else:
                     # Need to generate CCD
                     indices_to_generate.append(idx)
                     real_messages_to_generate.append(real_messages)
-                    batch_tasks.append((idx, real_messages))
+                    batch_tasks.append((idx, real_messages, source))
             
             if not batch_tasks:
                 print("All sessions in this batch already complete, skipping...")
@@ -262,7 +263,7 @@ async def main():
             # Pair profiles with indices and messages
             tasks_to_run = []
             gen_idx = 0
-            for idx, real_messages in batch_tasks:
+            for idx, real_messages, source in batch_tasks:
                 if idx in existing_ccds:
                     # Use existing CCD
                     ccd = existing_ccds[idx]
@@ -272,7 +273,7 @@ async def main():
                         patient_type_content=config.get('patient').get('conversation_type'),
                         name="Patient"
                     )
-                    tasks_to_run.append((idx, profile, real_messages, ccd))
+                    tasks_to_run.append((idx, profile, real_messages, ccd, source))
                 else:
                     # Use newly generated CCD
                     ccd, profile = ccds_and_profiles[gen_idx]
@@ -280,7 +281,7 @@ async def main():
                     if profile is None:
                         print(f"Error generating profile for session {idx}: batch call returned None")
                         continue
-                    tasks_to_run.append((idx, profile, real_messages, ccd))
+                    tasks_to_run.append((idx, profile, real_messages, ccd, source))
             
             if not tasks_to_run:
                 continue
@@ -289,13 +290,13 @@ async def main():
             print(f"Generating {len(tasks_to_run)} conversations in parallel...")
             batch_coroutines = [
                 run_session(profile, real_messages, config=config)
-                for idx, profile, real_messages, ccd in tasks_to_run
+                for idx, profile, real_messages, ccd, _ in tasks_to_run
             ]
             
             results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
             
             # Save results with CCD
-            for (idx, _, _, ccd), result in zip(tasks_to_run, results):
+            for (idx, _, _, ccd, source), result in zip(tasks_to_run, results):
                 if isinstance(result, Exception):
                     print(f"\nError in session {idx}: {result}")
                     print(f"Error type: {type(result).__name__}")
@@ -303,6 +304,7 @@ async def main():
                 else:
                     # Add CCD to result
                     result['ccd'] = ccd
+                    result['source'] = source
                     save_session_results(result, output_dir, idx)
         
         print(f"\nFinished! Session transcripts saved to {output_dir}/")
@@ -315,11 +317,12 @@ async def main():
         try:
             profile = json.loads(row["profile"])
             real_messages = row["messages"]
+            source = row.get("source")
             if args.psi == "eeyore":
                 system_prompt, _, _ = await prepare_prompt_from_profile(profile)
                 profile["eeyore_system_prompt"] = system_prompt
 
-            all_tasks.append((idx, profile, real_messages))
+            all_tasks.append((idx, profile, real_messages, source))
 
         except Exception as e:
             print(f"Error preparing session {idx}: {e}")
@@ -333,13 +336,13 @@ async def main():
         
         # Filter tasks: skip sessions that already exist and are valid
         tasks_to_run = []
-        for idx, profile, real_messages in batch:
+        for idx, profile, real_messages, source in batch:
             output_path = output_dir / f"session_{idx}.json"
             if session_exists_and_valid(output_path, check_ccd=False):
                 print(f"Skipping session {idx} (already exists and passes validation)")
                 skipped_count += 1
             else:
-                tasks_to_run.append((idx, profile, real_messages))
+                tasks_to_run.append((idx, profile, real_messages, source))
         
         if not tasks_to_run:
             continue
@@ -347,16 +350,17 @@ async def main():
         # Create and execute batch tasks
         batch_coroutines = [
             run_session(profile, real_messages, config=config)
-            for idx, profile, real_messages in tasks_to_run
+            for idx, profile, real_messages, _ in tasks_to_run
         ]
         
         results = await asyncio.gather(*batch_coroutines, return_exceptions=True)
         
         # Save results for this batch
-        for (idx, _, _), result in zip(tasks_to_run, results):
+        for (idx, _, _, source), result in zip(tasks_to_run, results):
             if isinstance(result, Exception):
                 print(f"\nError in session {idx}: {result}")
             else:
+                result['source'] = source
                 save_session_results(result, output_dir, idx)
 
     print(f"\nFinished! Session transcripts saved to {output_dir}/")

@@ -43,7 +43,7 @@ def load_eeyore_dataset(dataset_type: str, indices: list = None):
     """Load dataset based on type and optional indices.
     
     Args:
-        dataset_type: Type of dataset to load (e.g., "esc")
+        dataset_type: Type of dataset to load (e.g., "esc" or "all")
         indices: Optional list of specific indices to load
         
     Returns:
@@ -60,6 +60,8 @@ def load_eeyore_dataset(dataset_type: str, indices: list = None):
             return load_eeyore_from_hf(dataset_type="HOPE", indices=indices)
         case "annomi":
             return load_eeyore_from_hf(dataset_type="AnnoMI", indices=indices)
+        case "all":
+            return load_all_real(indices=indices)
         case _:
             raise ValueError(f"Unsupported dataset type: {dataset_type}")
 
