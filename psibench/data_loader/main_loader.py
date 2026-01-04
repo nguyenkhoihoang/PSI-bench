@@ -117,7 +117,7 @@ def load_synthetic_hf_to_df(psi: str, backend_llm: str, split: str = "train", to
     """
 
     hf_token = token or os.getenv("HF_TOKEN")
-    dataset = load_dataset("hknguyen20/psibench-synthetic", split=split, token=hf_token)
+    dataset = load_dataset("hknguyen20/psibench-data", split=split, token=hf_token)
     df = dataset.to_pandas()
 
     # Filter by psi and backend (case-insensitive)

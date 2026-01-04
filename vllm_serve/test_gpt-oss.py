@@ -6,9 +6,9 @@ messages = [
 ]
 
 response = litellm.completion(
-            model="hosted_vllm/openai/gpt-oss-20b", # pass the vllm model name
+            model="hosted_vllm/openai/gpt-oss-120b", # pass the vllm model name
             messages=messages,
-            api_base="http://141.142.254.222:9000/v1",
+            api_base="http://convai-srv-03.cs.illinois.edu:9000/v1",
             reasoning_effort="medium", # can be "low", "medium", "high"
             temperature=0.9,
             max_tokens=2000)

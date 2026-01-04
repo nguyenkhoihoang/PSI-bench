@@ -12,7 +12,7 @@
 # LLM
 # Qwen/Qwen3-30B-A3B-Instruct-2507
 
-MODEL_NAME="Qwen/Qwen3-30B-A3B-Instruct-2507"
+MODEL_NAME="openai/gpt-oss-120b"
 
 # Specify which GPUs to use (0 means first GPU, use "0,1,2,3" for multiple GPUs)
 export CUDA_VISIBLE_DEVICES=0,1,2,3
@@ -55,10 +55,10 @@ echo "Public endpoint: $(curl -s ifconfig.me):$VLLM_SERVER_PORT" >> $LOG_PATH
 #   --port                 : HTTP port for the server
 #   --max-model-len        : max context length
 #   --gpu-memory-utilization : fraction of GPU memory to allocate
-
+# --disable-custom-all-reduce: reduce speed but improve stability
 vllm serve $MODEL_NAME \
     --tensor-parallel-size $GPU_NUM \
-    --max-num-seqs 32 \
+    --max-num-seqs 16 \
     --async-scheduling \
     --port $VLLM_SERVER_PORT \
     --max-model-len 20000 \

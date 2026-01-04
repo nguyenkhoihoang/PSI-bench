@@ -8,7 +8,7 @@ messages = [
 response = litellm.completion(
             model="hosted_vllm/Qwen/Qwen3-30B-A3B-Instruct-2507", # pass the vllm model name
             messages=messages,
-            api_base="http://convai-srv-01.cs.illinois.edu:9000/v1",
+            api_base="http://convai-srv-03.cs.illinois.edu:9000/v1",
             temperature=0.9,
             max_tokens=2000)
 

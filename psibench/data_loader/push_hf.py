@@ -7,7 +7,7 @@ Usage:
     python psibench/data_loader/push_hf.py <data_dir> <repo_id> [--version v1.0] [--private]
     
 Example:
-    python psibench/data_loader/push_hf.py /work/hdd/bfjp/data/synthetic/test/ hknguyen20/psibench-synthetic --version v1.0
+    python psibench/data_loader/push_hf.py /shared/storage-01/users/nkhoang2/data/ hknguyen20/psibench-data --version v1.0
 """
 import argparse
 import sys
@@ -29,6 +29,7 @@ except ImportError:
     print("[ERROR] datasets not installed. Install with: pip install datasets")
     sys.exit(1)
 
+from psibench.data_loader.utils import normalize_backend_name
 
 _DESCRIPTION = "Synthetic psychotherapy conversations generated with PatientPSI and Roleplaydoh using different LLMs"
 
@@ -53,7 +54,6 @@ class PSIBenchSynthetic(datasets.GeneratorBasedBuilder):
                 "profile": datasets.Value("string"),
                 "psi": datasets.Value("string"),
                 "backend_llm": datasets.Value("string"),
-                "dataset": datasets.Value("string"),
                 "num_patient_turns": datasets.Value("int32"),
                 "ccd": {
                     "life_history": datasets.Value("string"),
@@ -98,20 +98,16 @@ class PSIBenchSynthetic(datasets.GeneratorBasedBuilder):
                     if not dataset_dir.is_dir():
                         continue
                     
-                    dataset_name = dataset_dir.name
-                    
                     for session_file in sorted(dataset_dir.glob('session_*.json')):
                         with open(session_file) as f:
                             data = json.load(f)
-                            # Prefer explicit source field if present
-                            dataset_value = data.get("source", dataset_name)
+                            session_id_val = int(session_file.stem.split("_")[-1])
                             yield idx, {
-                                "session_id": data.get("session_id", idx),
+                                "session_id": session_id_val,
                                 "messages": data.get("messages", []),
                                 "profile": data.get("profile", ""),
                                 "psi": psi_name,
                                 "backend_llm": backend_name,
-                                "dataset": dataset_value,
                                 "num_patient_turns": data.get("num_patient_turns", 0),
                                 "ccd": data.get("ccd", {}),
                             }
@@ -183,8 +179,6 @@ def load_all_data_to_dataframe(data_dir: Path) -> pd.DataFrame:
     """Load all synthetic data from nested directory structure into a DataFrame.
     
     Special handling:
-    - For patientpsi: uses 'ccd' as 'profile' (since ccd is the profile equivalent)
-    - For others: keeps 'profile' field as-is
     - All dict/list values converted to readable JSON strings (no unicode escaping)
     """
     all_sessions = []
@@ -199,18 +193,21 @@ def load_all_data_to_dataframe(data_dir: Path) -> pd.DataFrame:
             if not backend_dir.is_dir():
                 continue
             
-            backend_name = backend_dir.name
+            backend_name = normalize_backend_name(backend_dir.name)
             
             for dataset_dir in sorted(backend_dir.iterdir()):
                 if not dataset_dir.is_dir():
                     continue
                 
-                dataset_name = dataset_dir.name
-                
                 for session_file in sorted(dataset_dir.glob('session_*.json')):
                     try:
                         with open(session_file, 'r', encoding='utf-8') as f:
                             session_data = json.load(f)
+                            if 'session_id' not in session_data:
+                                try:
+                                    session_data['session_id'] = int(session_file.stem.split('session_')[-1])
+                                except Exception:
+                                    session_data['session_id'] = len(all_sessions)
                             
                             # Convert all complex types to JSON strings (with readable unicode)
                             for key, value in list(session_data.items()):
@@ -218,20 +215,12 @@ def load_all_data_to_dataframe(data_dir: Path) -> pd.DataFrame:
                                     # ensure_ascii=False keeps unicode readable (no \uXXXX escaping)
                                     session_data[key] = json.dumps(value, ensure_ascii=False, indent=2)
 
-                            # CCD handling: save only for patientpsi, empty for others
-                            if psi_name.lower() == 'patientpsi':
-                                # Ensure CCD present for patientpsi (fallback to profile if missing)
-                                if 'ccd' not in session_data and 'profile' in session_data:
-                                    session_data['ccd'] = session_data['profile']
-
-                            else:
-                                # For non-patientpsi, clear CCD
+                            if psi_name.lower() != 'patientpsi':
                                 session_data['ccd'] = json.dumps({}, ensure_ascii=False)
 
                             # Add metadata
                             session_data['psi'] = psi_name
                             session_data['backend_llm'] = backend_name
-                            session_data['dataset'] = session_data.get('source', dataset_name)
                             all_sessions.append(session_data)
                     except Exception as e:
                         print(f"[WARNING] Failed to load {session_file}: {e}")
@@ -268,7 +257,7 @@ def push_hf(data_dir: Path, repo_id: str, version: str = "v1.0", private: bool =
         print(f"[OK] Loaded {len(df)} sessions")
         print(f"  PSI simulators: {sorted(df['psi'].unique())}")
         print(f"  Backend LLMs: {sorted(df['backend_llm'].unique())}")
-        print(f"  Datasets: {sorted(df['dataset'].unique())}")
+        # dataset column removed (source is implicit in messages/profile)
         
         # Create temp directory
         temp_dir = Path("/tmp/psibench_upload")
@@ -335,7 +324,7 @@ def push_hf(data_dir: Path, repo_id: str, version: str = "v1.0", private: bool =
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push PSI-bench synthetic data to HuggingFace Hub"
+        description="Push PSI-bench synthetic data to HuggingFace Hub (public by default)"
     )
     parser.add_argument(
         "data_dir",
@@ -356,7 +345,7 @@ def main():
     parser.add_argument(
         "--private",
         action="store_true",
-        help="Make dataset private"
+        help="Make dataset private (default is public)"
     )
     parser.add_argument(
         "--token",

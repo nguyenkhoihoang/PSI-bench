@@ -28,3 +28,13 @@ def merge_consecutive_messages(real_messages:list):
     
     merged.append(current)
     return merged
+
+def normalize_backend_name(name: str) -> str:
+    """Strip hosting/vendor prefixes from backend folder names."""
+    if name.startswith("hosted_vllm_"):
+        name = name[len("hosted_vllm_"):]
+    for vendor_prefix in ("openai_", "Qwen_", "meta-llama_", "llama_"):
+        if name.startswith(vendor_prefix):
+            name = name[len(vendor_prefix):]
+            break
+    return name

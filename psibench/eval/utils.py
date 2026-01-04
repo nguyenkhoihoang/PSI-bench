@@ -40,7 +40,7 @@ def get_all_psi_backend_pairs(token: Optional[str] = None) -> List[Tuple[str, st
         List of (psi, backend_llm) tuples
     """
     hf_token = token or os.getenv("HF_TOKEN")
-    dataset = load_dataset("hknguyen20/psibench-synthetic", split="train", token=hf_token)
+    dataset = load_dataset("hknguyen20/psibench-data", split="train", token=hf_token)
     df = dataset.to_pandas()
     
     # Get unique pairs

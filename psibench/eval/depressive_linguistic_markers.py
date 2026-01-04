@@ -48,6 +48,7 @@ from tabulate import tabulate
 
 from psibench.data_loader.main_loader import load_eeyore_dataset, load_synthetic_hf_to_df
 from psibench.eval.utils import extract_patient_messages_by_turn, get_all_psi_backend_pairs, safe_dir_name
+from psibench.data_loader.utils import normalize_backend_name
 
 
 # =============================================================================
@@ -494,13 +495,15 @@ def main():
     
     # Load synthetic data for each pair
     for psi, backend_llm in sorted(all_pairs):
-        label = f"{psi}-{safe_dir_name(backend_llm)}"
+        # Normalize backend_llm name to match HF dataset
+        normalized_backend = normalize_backend_name(backend_llm)
+        label = f"{psi}-{safe_dir_name(normalized_backend)}"
         
         print(f"\n[INFO] Loading synthetic data for {label}...")
         
         # Load synthetic conversations
         try:
-            df = load_synthetic_hf_to_df(psi=psi, backend_llm=backend_llm)
+            df = load_synthetic_hf_to_df(psi=psi, backend_llm=normalized_backend)
             if df.empty:
                 print(f"[WARNING] No data found for {label}")
                 continue

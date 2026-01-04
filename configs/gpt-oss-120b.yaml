@@ -1,13 +1,13 @@
 # Patient model
 patient:
-  simulator: "eeyore"
+  simulator: "roleplaydoh"
   model: "hosted_vllm/openai/gpt-oss-120b"
   temperature: 0.7
   max_tokens: 1000
   max_attempts: 5
-  conversation_type: "reserved"
-  api_base: "http://141.142.254.222:9000/v1"
-  max_turns: 15
+  conversation_type: "plain"
+  api_base: "http://convai-srv-03.cs.illinois.edu:9000/v1"
+  max_turns: 20
   
 # Therapist model
 therapist:
