@@ -8,7 +8,7 @@ patient:
   max_tokens: 1000
   max_attempts: 5
   conversation_type: "verbose"
-  max_turns: 15
+  max_turns: 20
   
 # Therapist model
 therapist:

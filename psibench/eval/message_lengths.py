@@ -2,22 +2,22 @@
 
 From HF synthetic dataset:
 
-python -m psibench.eval.compare_conversation_lengths --hf \
+python -m psibench.eval.message_lengths --hf \
   --config configs/default.yaml \
   --output-dir output/length_comparison
 
 Usage - automatically extracts PSI and dataset from folder path:
 
 (archived)
-python -m psibench.eval.compare_conversation_lengths --all \
+python -m psibench.eval.message_lengths --all \
   --data-folder /work/hdd/bfjp/data/synthetic/test/ \
   --model hosted_vllm_openai_gpt-oss-120b
   
 
-python -m psibench.eval.compare_conversation_lengths \
+python -m psibench.eval.message_lengths \
 --folder /work/hdd/bfjp/data/synthetic/test/patientpsi/hosted_vllm_openai_gpt-oss-120b/hope
 
-python -m psibench.eval.compare_conversation_lengths \
+python -m psibench.eval.message_lengths \
 --folder /work/hdd/bfjp/data/synthetic/test/roleplaydoh/hosted_vllm_openai_gpt-oss-120b/annomi
 """
 
@@ -426,40 +426,117 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
     """
     output_path.mkdir(parents=True, exist_ok=True)
     
-    fig, ax = plt.subplots(figsize=(14, 7))
+    # ACL-style figure: more square-shaped
+    fig, ax = plt.subplots(figsize=(9, 8))
     
-    # Filter data to only show first 12 turns (0-11)
-    max_display_turns = 12
-    real_df_filtered = real_df[real_df['turn'] < max_display_turns]
+    # Plot real data (black, no marker)
+    ax.plot(real_df['turn'], real_df['avg_words'], 
+            linewidth=2.5, label='Real', alpha=0.9, linestyle='-', color='black', marker=None)
     
-    # Plot real data (solid line, thicker)
-    ax.plot(real_df_filtered['turn'], real_df_filtered['avg_words'], 
-            linewidth=3, label='Real', alpha=0.9, linestyle='-', color='black')
+    # Define colors for each PSI type
+    psi_colors = {
+        'patientpsi': '#1f77b4',      # blue
+        'roleplaydoh': '#ff7f0e',     # orange
+        'eeyore': '#2ca02c',           # green
+    }
+    
+    # Define markers for each backend_llm type
+    backend_markers = {
+        'gpt-4.1-mini': 'o',
+        'gpt-4-turbo': 's',
+        'gpt-oss-120b': '^',
+        'qwen3-8b-instruct': 'D',
+        'qwen3-reasoning': 'v',
+        'llama3.1-8b-instruct': 'p',
+    }
+    
+    # Define marker positions (same as xticks)
+    marker_positions = [0, 5, 10, 15, 20]
+    
+    # Track which PSI types and backends are actually used
+    used_psi_types = set()
+    used_backends = set()
     
     # Plot synthetic data for each variant
-    colors = plt.cm.tab10(range(len(synthetic_data)))
-    for idx, (variant_name, synth_df) in enumerate(sorted(synthetic_data.items())):
-        synth_df_filtered = synth_df[synth_df['turn'] < max_display_turns]
-        ax.plot(synth_df_filtered['turn'], synth_df_filtered['avg_words'], 
-                linewidth=2, label=variant_name, alpha=0.8, color=colors[idx])
+    for variant_name, synth_df in sorted(synthetic_data.items()):
+        # Parse variant_name to extract PSI type and backend_llm
+        # Format: "psi-backend" or "psi_backend_llm" depending on how it was created
+        parts = variant_name.split('-')
+        
+        # Extract PSI type (first part or match against known PSI types)
+        psi_type = None
+        backend_llm = None
+        
+        for psi in psi_colors.keys():
+            if variant_name.startswith(psi):
+                psi_type = psi
+                # Rest is backend
+                backend_part = variant_name[len(psi):].lstrip('-_')
+                backend_llm = backend_part if backend_part else 'unknown'
+                break
+        
+        if not psi_type:
+            # Fallback: assume first part is PSI
+            psi_type = parts[0] if parts else 'unknown'
+            backend_llm = '-'.join(parts[1:]) if len(parts) > 1 else 'unknown'
+        
+        # Get color from PSI type, default to a neutral color
+        color = psi_colors.get(psi_type, '#7f7f7f')
+        
+        # Get marker from backend_llm, with a smart matching
+        marker = 'o'  # default marker
+        backend_name = None
+        for backend, marker_char in backend_markers.items():
+            if backend.lower() in backend_llm.lower() or backend_llm.lower() in backend.lower():
+                marker = marker_char
+                backend_name = backend
+                break
+        
+        # Track usage
+        used_psi_types.add(psi_type)
+        if backend_name:
+            used_backends.add(backend_name)
+        
+        # Plot line without markers first
+        ax.plot(synth_df['turn'], synth_df['avg_words'], 
+                linewidth=2, alpha=0.8, color=color, linestyle='-')
+        
+        # Add markers only at specific positions
+        marker_df = synth_df[synth_df['turn'].isin(marker_positions)]
+        if not marker_df.empty:
+            ax.plot(marker_df['turn'], marker_df['avg_words'], 
+                    color=color, marker=marker, markersize=7, linestyle='None', alpha=0.8)
     
-    # Formatting
-    ax.set_xlabel('Turn Index', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Average Word Count', fontsize=12, fontweight='bold')
-    ax.set_title(f'Patient Message Length Comparison: All PSI Variants vs Real', 
-                 fontsize=14, fontweight='bold')
-    ax.legend(fontsize=9, loc='best')
-    ax.grid(True, alpha=0.3)
+    # Create separate legend entries for PSI types (colors) and backends (markers)
+    from matplotlib.lines import Line2D
     
-    # Ensure x-axis shows integer values only
-    all_turns = []
-    all_turns.extend(real_df['turn'].tolist())
-    for synth_df in synthetic_data.values():
-        all_turns.extend(synth_df['turn'].tolist())
+    # Legend for PSI types (colors)
+    psi_legend_elements = [Line2D([0], [0], color='black', linewidth=2.5, label='Real')]
+    for psi_type in sorted(used_psi_types):
+        if psi_type in psi_colors:
+            psi_legend_elements.append(
+                Line2D([0], [0], color=psi_colors[psi_type], linewidth=2, label=psi_type)
+            )
     
-    if all_turns:
-        max_turn = min(int(max(all_turns)) + 1, 12)
-        ax.set_xticks(range(max_turn))
+    # Legend for backends (markers)
+    backend_legend_elements = []
+    for backend in sorted(used_backends):
+        if backend in backend_markers:
+            backend_legend_elements.append(
+                Line2D([0], [0], color='gray', marker=backend_markers[backend], 
+                       linestyle='None', markersize=6, label=backend)
+            )
+    
+    # Create two separate legends
+    first_legend = ax.legend(handles=psi_legend_elements, fontsize=9, loc='upper left', title='PSI Type')
+    ax.add_artist(first_legend)
+    ax.legend(handles=backend_legend_elements, fontsize=9, loc='upper right', title='Backend LLM')
+    
+    # ACL-style formatting
+    ax.set_xlabel('Turn Index', fontsize=12)
+    ax.set_ylabel('Average Word Count', fontsize=12)
+    ax.grid(False)
+    ax.set_xticks([0, 5, 10, 15, 20])
     
     plt.tight_layout()
     filename = 'all_psi_variants_comparison.png'

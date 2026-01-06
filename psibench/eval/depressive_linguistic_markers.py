@@ -6,7 +6,7 @@ across real depressive patients and different LLM-based patient simulators.
 
 Frequencies are calculated as:
 - Raw count: Total occurrences of each marker
-- Normalized by words: Count per 100 words
+- Normalized by tokens: Count per configurable token window (default 100 tokens)
 - Normalized by utterances: Average count per patient turn
 - Normalized by unique speakers: Average count per conversation
 
@@ -22,15 +22,15 @@ python psibench/eval/depressive_linguistic_markers.py \
 
 # Load with specific metric only
 python psibench/eval/depressive_linguistic_markers.py \
-    --output-dir output/depressive_markers/per_100_words \
-    --metrics per_100_words \
+    --output-dir output/depressive_markers/per_tokens \
+    --metrics per_tokens \
     --save-csv
 
 # Analyze only first 10 turns for all pairs
 python psibench/eval/depressive_linguistic_markers.py \
     --max-turns 10 \
     --output-dir output/depressive_markers/first_10_turns \
-    --metrics per_100_words \
+    --metrics per_tokens \
     --save-csv
 
 """
@@ -248,13 +248,16 @@ def analyze_conversations(
     }
 
 
-def compute_normalized_metrics(analysis_results: Dict) -> Dict[str, Dict[str, float]]:
+def compute_normalized_metrics(
+    analysis_results: Dict,
+    token_scale: int = 100
+) -> Dict[str, Dict[str, float]]:
     """
     Compute normalized metrics from analysis results.
     
     Returns:
         Dictionary with keys:
-        - 'per_100_tokens': Markers per 100 tokens
+        - 'per_tokens': Markers per token_scale tokens
         - 'percentage_messages': Percentage of patient messages containing each marker
     """
     raw_counts = analysis_results['raw_counts']
@@ -264,15 +267,15 @@ def compute_normalized_metrics(analysis_results: Dict) -> Dict[str, Dict[str, fl
     
     metrics = {}
     
-    # Per 100 tokens (exclude first_person_singular and social_pronouns from display)
+    # Per token_scale tokens (exclude first_person_singular and social_pronouns from display)
     if token_count > 0:
-        metrics['per_100_tokens'] = {
-            marker: (count / token_count) * 100
+        metrics['per_tokens'] = {
+            marker: (count / token_count) * token_scale
             for marker, count in raw_counts.items()
             if marker not in ['first_person_singular', 'social_pronouns']
         }
     else:
-        metrics['per_100_tokens'] = {
+        metrics['per_tokens'] = {
             marker: 0.0 for marker in raw_counts 
             if marker not in ['first_person_singular', 'social_pronouns']
         }
@@ -288,7 +291,7 @@ def compute_normalized_metrics(analysis_results: Dict) -> Dict[str, Dict[str, fl
     else:
         self_focus_ratio = 0.0  # Neither present
     
-    metrics['per_100_tokens']['self_focus_ratio'] = self_focus_ratio
+    metrics['per_tokens']['self_focus_ratio'] = self_focus_ratio
     
     # Percentage of messages containing each marker (exclude first_person_singular and social_pronouns)
     if utterance_count > 0:
@@ -347,21 +350,22 @@ def compute_statistical_measures(per_conversation_counts: List[Dict[str, int]]) 
 
 def create_comparison_dataframe(
     results_dict: Dict[str, Dict],
-    metric_type: str = 'per_100_words'
+    metric_type: str = 'per_tokens',
+    token_scale: int = 100
 ) -> pd.DataFrame:
     """
     Create a comparison DataFrame for visualization.
     
     Args:
         results_dict: Dictionary mapping dataset name to analysis results
-        metric_type: Type of metric ('per_100_words', 'per_utterance', 'per_conversation')
+        metric_type: Type of metric ('per_tokens', 'percentage_messages')
         
     Returns:
         DataFrame with markers as rows and datasets as columns
     """
     data = {}
     for dataset_name, results in results_dict.items():
-        metrics = compute_normalized_metrics(results)
+        metrics = compute_normalized_metrics(results, token_scale)
         data[dataset_name] = metrics[metric_type]
     
     df = pd.DataFrame(data)
@@ -370,7 +374,8 @@ def create_comparison_dataframe(
 
 def print_summary_table(
     results_dict: Dict[str, Dict],
-    metric_type: str = 'per_100_words'
+    metric_type: str = 'per_tokens',
+    token_scale: int = 100
 ):
     """
     Print a formatted summary table of marker frequencies.
@@ -379,7 +384,7 @@ def print_summary_table(
         results_dict: Dictionary mapping dataset name to analysis results
         metric_type: Type of metric to display
     """
-    comparison_df = create_comparison_dataframe(results_dict, metric_type)
+    comparison_df = create_comparison_dataframe(results_dict, metric_type, token_scale)
     
     # Create table
     table_data = []
@@ -390,8 +395,12 @@ def print_summary_table(
     
     headers = ["Marker"] + list(comparison_df.columns)
     
+    metric_label = (
+        f"Per {token_scale} Tokens" if metric_type == 'per_tokens'
+        else metric_type.replace('_', ' ').title()
+    )
     print("\n" + "="*100)
-    print(f"DEPRESSIVE LINGUISTIC MARKERS COMPARISON ({metric_type.replace('_', ' ').title()})")
+    print(f"DEPRESSIVE LINGUISTIC MARKERS COMPARISON ({metric_label})")
     print("="*100)
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
     print()
@@ -449,9 +458,15 @@ def main():
         "--metrics",
         type=str,
         nargs="+",
-        choices=["per_100_tokens", "percentage_messages", "all"],
-        default=["per_100_tokens", "percentage_messages"],
+        choices=["per_tokens", "percentage_messages", "all"],
+        default=["per_tokens", "percentage_messages"],
         help="Normalization metrics to compute and visualize"
+    )
+    parser.add_argument(
+        "--token-scale",
+        type=int,
+        default=100,
+        help="Scale factor for token-normalized metrics (e.g., 100 for per-100 tokens, 1000 for per-1000 tokens)"
     )
     parser.add_argument(
         "--save-csv",
@@ -463,7 +478,7 @@ def main():
     
     # Expand "all" metrics
     if "all" in args.metrics:
-        args.metrics = ["per_100_tokens", "percentage_messages"]
+        args.metrics = ["per_tokens", "percentage_messages"]
     
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -520,12 +535,15 @@ def main():
     
     # Compute and display results for each metric
     for metric_type in args.metrics:
-        print_summary_table(results_dict, metric_type)
+        print_summary_table(results_dict, metric_type, args.token_scale)
         
         # Save to CSV
         if args.save_csv:
-            comparison_df = create_comparison_dataframe(results_dict, metric_type)
-            csv_path = args.output_dir / f"markers_{metric_type}.csv"
+            comparison_df = create_comparison_dataframe(results_dict, metric_type, args.token_scale)
+            if metric_type == "per_tokens":
+                csv_path = args.output_dir / f"markers_per_{args.token_scale}_tokens.csv"
+            else:
+                csv_path = args.output_dir / f"markers_{metric_type}.csv"
             comparison_df.to_csv(csv_path)
             print(f"[CSV SAVED] {csv_path}")
     

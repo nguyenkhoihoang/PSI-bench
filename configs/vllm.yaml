@@ -1,7 +1,12 @@
 # Patient model
+
+# hosted_vllm/Qwen/Qwen3-30B-A3B-Instruct-2507
+# hosted_vllm/meta-llama/Llama-3.3-70B-Instruct
+# hosted_vllm/meta-llama/Llama-3.1-8B-Instruct
+
 patient:
   simulator: "roleplaydoh"
-  model: "hosted_vllm/openai/gpt-oss-120b"
+  model: "hosted_vllm/meta-llama/Llama-3.3-70B-Instruct"
   temperature: 0.7
   max_tokens: 1000
   max_attempts: 5
