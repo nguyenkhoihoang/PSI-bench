@@ -427,27 +427,22 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
     output_path.mkdir(parents=True, exist_ok=True)
     
     # ACL-style figure: more square-shaped
-    fig, ax = plt.subplots(figsize=(9, 8))
+    fig, ax = plt.subplots(figsize=(10, 7))
     
-    # Plot real data (black, no marker)
+    # Plot real data (black, no marker) - same thickness as others
     ax.plot(real_df['turn'], real_df['avg_words'], 
-            linewidth=2.5, label='Real', alpha=0.9, linestyle='-', color='black', marker=None)
+            linewidth=2, label='Real', alpha=0.9, linestyle='-', color='black', marker=None)
     
     # Define colors for each PSI type
     psi_colors = {
         'patientpsi': '#1f77b4',      # blue
         'roleplaydoh': '#ff7f0e',     # orange
-        'eeyore': '#2ca02c',           # green
     }
     
     # Define markers for each backend_llm type
     backend_markers = {
-        'gpt-4.1-mini': 'o',
-        'gpt-4-turbo': 's',
         'gpt-oss-120b': '^',
-        'qwen3-8b-instruct': 'D',
-        'qwen3-reasoning': 'v',
-        'llama3.1-8b-instruct': 'p',
+        'Qwen3-30B-A3B-Instruct-2507': 'o',
     }
     
     # Define marker positions (same as xticks)
@@ -497,7 +492,7 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
         if backend_name:
             used_backends.add(backend_name)
         
-        # Plot line without markers first
+        # Plot line without markers first - same thickness as real
         ax.plot(synth_df['turn'], synth_df['avg_words'], 
                 linewidth=2, alpha=0.8, color=color, linestyle='-')
         
@@ -507,40 +502,54 @@ def plot_multiple_psi_comparison(real_df: pd.DataFrame, synthetic_data: Dict[str
             ax.plot(marker_df['turn'], marker_df['avg_words'], 
                     color=color, marker=marker, markersize=7, linestyle='None', alpha=0.8)
     
-    # Create separate legend entries for PSI types (colors) and backends (markers)
+    # Create two legends - one for colors, one for markers
     from matplotlib.lines import Line2D
     
-    # Legend for PSI types (colors)
-    psi_legend_elements = [Line2D([0], [0], color='black', linewidth=2.5, label='Real')]
+    # Legend for PSI types (colors) - first row
+    color_legend_elements = [Line2D([0], [0], color='black', linewidth=2, label='Real')]
     for psi_type in sorted(used_psi_types):
         if psi_type in psi_colors:
-            psi_legend_elements.append(
+            color_legend_elements.append(
                 Line2D([0], [0], color=psi_colors[psi_type], linewidth=2, label=psi_type)
             )
     
-    # Legend for backends (markers)
-    backend_legend_elements = []
+    # Legend for backends (markers) - second row
+    marker_legend_elements = []
     for backend in sorted(used_backends):
         if backend in backend_markers:
-            backend_legend_elements.append(
+            marker_legend_elements.append(
                 Line2D([0], [0], color='gray', marker=backend_markers[backend], 
-                       linestyle='None', markersize=6, label=backend)
+                       linestyle='None', markersize=7, label=backend)
             )
     
-    # Create two separate legends
-    first_legend = ax.legend(handles=psi_legend_elements, fontsize=9, loc='upper left', title='PSI Type')
-    ax.add_artist(first_legend)
-    ax.legend(handles=backend_legend_elements, fontsize=9, loc='upper right', title='Backend LLM')
-    
     # ACL-style formatting
-    ax.set_xlabel('Turn Index', fontsize=12)
-    ax.set_ylabel('Average Word Count', fontsize=12)
+    ax.set_xlabel('Turn Index', fontsize=16)
+    ax.set_ylabel('Average Word Count', fontsize=16)
     ax.grid(False)
     ax.set_xticks([0, 5, 10, 15, 20])
+    ax.set_yticks([0, 25, 50, 100, 200, 400])
+    ax.tick_params(axis='both', which='major', labelsize=14)
     
+    # Create both legends with proper positioning
+    # Place color legend on top (first row)
+    legend1 = ax.legend(handles=color_legend_elements, fontsize=14, 
+                        bbox_to_anchor=(0.5, 1.05), loc='lower center', ncol=max(3, len(color_legend_elements)),
+                        frameon=False, handletextpad=0.2, columnspacing=1.0)
+    ax.add_artist(legend1)
+    
+    # Place marker legend on top (second row)
+    legend2 = ax.legend(handles=marker_legend_elements, fontsize=14, 
+                        bbox_to_anchor=(0.5, 0.98), loc='lower center', ncol=max(2, len(marker_legend_elements)),
+                        frameon=False, handletextpad=0.2, columnspacing=1.0)
+    ax.add_artist(legend2)
+    
+    # Adjust layout to accommodate legends above plot
     plt.tight_layout()
+    
     filename = 'all_psi_variants_comparison.png'
-    plt.savefig(output_path / filename, dpi=300, bbox_inches='tight')
+    # Include legend artists in the bounding box calculation
+    plt.savefig(output_path / filename, dpi=300, bbox_inches='tight', 
+                bbox_extra_artists=[legend1, legend2], pad_inches=0.1)
     print(f"\n✓ Multi-variant comparison graph saved to: {output_path / filename}")
     plt.close()
 
