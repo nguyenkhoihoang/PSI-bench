@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import re
+import json
 from string import Template
+from json_repair import repair_json
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -311,9 +313,12 @@ async def roleplay_doh_pipeline(client, prompts, output, profile):
     res = re.search(r"\{([\S\s]*)\}", que_output, re.DOTALL)
     if res is not None:
         try:
-            que_output = eval(res.group(0))
-
+            # Use json_repair to fix malformed JSON before parsing
+            json_str = "{" + res.group(1) + "}"
+            repaired_json = repair_json(json_str)
+            que_output = json.loads(repaired_json)
         except Exception as e:
+            logger.warning(f"Failed to parse criteria questions JSON: {e}")
             print(e)
             return False
     else:
@@ -369,9 +374,12 @@ async def roleplay_doh_pipeline(client, prompts, output, profile):
     res = re.search(r"\{([\S\s]*)\}", output, re.DOTALL)
     if res is not None:
         try:
-            output = eval(res.group(0))["result"]["response"]
-
+            # Use json_repair to fix malformed JSON before parsing
+            json_str = "{" + res.group(1) + "}"
+            repaired_json = repair_json(json_str)
+            output = json.loads(repaired_json)["result"]["response"]
         except Exception as e:
+            logger.warning(f"Failed to parse refined response JSON: {e}")
             print(e)
             return False
     else:
