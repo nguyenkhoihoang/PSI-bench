@@ -1,0 +1,26 @@
+# Patient model
+
+# hosted_vllm/Qwen/Qwen3-30B-A3B-Instruct-2507
+# hosted_vllm/Qwen/Qwen3-30B-A3B
+# hosted_vllm/meta-llama/Llama-3.3-70B-Instruct
+# hosted_vllm/meta-llama/Llama-3.1-8B-Instruct
+num_retries: 3
+patient:
+  simulator: "roleplaydoh"
+  model: "hosted_vllm/openai/gpt-oss-20b"
+  temperature: 0.7
+  max_tokens: 1000
+  max_attempts: 5
+  conversation_type: "plain"
+  api_base: "http://convai-srv-03.cs.illinois.edu:9002/v1"
+  max_turns: 16
+  
+# Therapist model
+therapist:
+  # model: "gpt-4.1-mini"
+  # temperature: 0.5
+  # max_tokens: 1000
+  model: "hosted_vllm/openai/gpt-oss-20b"
+  temperature: 0.7
+  max_tokens: 1000
+  api_base: "http://convai-srv-03.cs.illinois.edu:9001/v1"
